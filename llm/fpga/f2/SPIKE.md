@@ -47,4 +47,4 @@ Spike's model and the tests are built with `software/libgemmini/gemmini_params.h
 | Accumulator | 1024 rows × 16 × 4 bytes = 64 KB |
 | Result read-out | `ACC_READ_FULL_WIDTH`: int32 results can be moved out |
 
-`backend_gemmini.c` depends on the full-width int32 read-out. The FPGA build has to use the same config: `FireSimGemminiRocketConfig`, not `FireSimLeanGemminiRocketConfig`, which turns off `acc_read_full_width`.
+The FPGA uses the prebuilt `FireSimLeanGemminiRocketConfig` image instead (#34). It has the same array, scratchpad and accumulator, but WS dataflow only and no int32 read-out (`acc_read_full_width = false`). Spike runs for the model should use the Lean `gemmini_params.h`, so that Spike matches the FPGA (#33).

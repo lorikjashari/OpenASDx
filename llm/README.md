@@ -16,11 +16,11 @@ llm/
 
 Dimensions match a 16-wide systolic array: hidden 64, 4 heads of 16, FFN 128, 2 layers, context 32.
 
-| Step | Where it runs after the F2 image is loaded |
+| Step | Where it runs on the F2 image (FireSim, see below) |
 | --- | --- |
-| QKV, QKᵀ, attention×V, output proj, MLP, LM head | FPGA GEMM in the AFI |
-| MLP ReLU | FPGA, `GEMM_FLAG_RELU` |
-| Embed, RMSNorm, RoPE, softmax, residual, KV cache | x86 CPU on the F2 instance |
+| QKV, QKᵀ, attention×V, output proj, MLP, LM head | Gemmini, the 16×16 systolic array on the FPGA |
+| MLP ReLU | Gemmini, the RELU activation on the store |
+| Embed, RMSNorm, RoPE, softmax, residual, KV cache | the Rocket RISC-V core next to Gemmini, also on the FPGA |
 
 ## Every matmul goes through one GEMM call
 
@@ -57,9 +57,22 @@ make test-f2    # same model, GEMM goes through the F2 register protocol in soft
 
 `test-f2` does not need an FPGA. It writes the OCL register block defined in `fpga/f2/cl_gemm_regs.h` and a stand-in engine performs the int8 mac. That is the host path you will keep when the real image is loaded.
 
-## Flash on the F2 instance
+## FPGA path: FireSim with Gemmini on F2
 
-The bitstream is customer logic on the F2 Small Shell (no shell DMA). Build it from the AWS FPGA HDK, upload the DCP, and create an AFI. When `describe-fpga-images` shows the image as available:
+Decided in #34. The FPGA runs a whole Chipyard chip, Rocket and Gemmini, built by FireSim, the same Gemmini we test on Spike (`fpga/f2/SPIKE.md`). The model is one RISC-V binary that runs on Spike, in Verilator, and on the FPGA.
+
+- **Image:** the public FireSim image `agfi-0f567000cb21cb06d` (`firesim_gemmini_rocket_singlecore_no_nic`), built from `FireSimLeanGemminiRocketConfig` at 30 MHz. It is prebuilt, so no bitstream build is needed.
+- **Region:** `eu-central-1` (Frankfurt), availability zone `eu-central-1b`. We keep data in the EU. The image is available there.
+- **Lean config:** 16×16 array, 256 KB scratchpad and 64 KB accumulator, WS dataflow only. Gemmini accumulates in int32, but it cannot move int32 results out (`acc_read_full_width = false`). Each GEMM result is scaled to int8 on Gemmini before it leaves the accelerator, and the CPU reference applies the same scaling so the backends stay bit-exact (#33).
+- **Optional later:** building `firesim_rocket_singlecore_gemmini_no_nic_l2_llc4mb_ddr3` (the full `GemminiRocketConfig`, 110 MHz) brings back int32 read-out. That is a bitstream build of several hours (#10).
+
+Steps: #35 (AWS access, done except for the manager), #11 (FireSim manager, load the image, Gemmini's tests on F2), #12 (the model on F2).
+
+## Backup: HDK register GEMM
+
+`src/backend_f2.c`, `fpga/f2/cl_gemm_regs.h` and `fpga/f2/load_afi.sh` are the earlier plan: a small register GEMM in the AWS HDK customer logic, driven from the x86 host. It stays as the fallback in case the FireSim path fails (#8, #9).
+
+The bitstream would be customer logic on the F2 Small Shell (no shell DMA), built from the AWS FPGA HDK. Once `describe-fpga-images` shows its AFI as available:
 
 ```shell
 cp fpga/f2/afi.env.example fpga/f2/afi.env   # set AGFI_ID to the agfi-... id
@@ -71,4 +84,4 @@ export F2_BAR=/sys/bus/pci/devices/<bdf>/resource0
 
 `load_afi.sh` uses `fpga-load-local-image -I agfi-...`. The regional `afi-...` id is for the EC2 API. The load tool wants the global id.
 
-The image must implement `fpga/f2/cl_gemm_regs.h`: int8 A and B in, int32 C out, width 16. Start from the HDK `cl_axil_reg_access` example for the first register bring-up.
+That image must implement `fpga/f2/cl_gemm_regs.h`: int8 A and B in, int32 C out, width 16.
