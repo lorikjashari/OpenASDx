@@ -18,4 +18,13 @@ void backend_gemm_i8(const int8_t *A, float a_scale,
                      float *C, int M, int N, int K,
                      int trans_b, int relu);
 
+/* Lean contract (FireSimLeanGemminiRocketConfig, the prebuilt F2 image): the int32 accumulator
+   cannot leave Gemmini, so each result is scaled and saturated to int8 on the accelerator:
+     q = clamp(round_half_even((float)acc * acc_scale), -128, 127),  C = q * out_scale
+   This is Gemmini's ACC_SCALE with a float acc_scale_t. The caller computes
+   acc_scale = a_scale * b_scale / out_scale once, so every backend gets the same float. */
+void backend_gemm_i8_o8(const int8_t *A, const int8_t *B, float *C,
+                        int M, int N, int K, int trans_b,
+                        float acc_scale, float out_scale);
+
 #endif
