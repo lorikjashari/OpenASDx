@@ -7,6 +7,7 @@ Sources:
   llm/fpga/f2/results/*.uartlog          console output of the FPGA runs (cycles, tokens, tests)
   llm/fpga/f2/results/demo/              the recorded demo run
   llm/fpga/f2/results/power/             the FPGA's core power, sampled during three runs
+  llm/fpga/f2/results/profile/           the profiling builds: each token's cycles by phase (#56)
   llm/bench/results/mac/                 the same model on an Apple M4 Pro, with powermetrics samples
   llm/fpga/f2/results/sweep-summary.txt  one line per FPGA run of Gemmini's tests
   llm/fpga/f2/results/stories-gemmini.{size,symbols}.txt   the ELF's sections and symbols
@@ -81,6 +82,17 @@ def stories_run(log):
         m = re.search(r"mean (\d+), min (\d+), max (\d+); in GEMM calls (\d+)%", s)
         r["mean"], r["min"], r["max"], r["gemm_pct"] = map(int, m.groups())
     return r
+
+
+def profile(log):
+    """The profiling build's run: cycles per generated token of each phase, and their total."""
+    s = read(f"profile/{log}")
+    assert "*** PASSED ***" in s and "all checks passed" in s
+    m = re.search(r"by phase \(they add up to (\d+) of (\d+)\)", s)
+    total, of = map(int, m.groups())
+    phases = {name.strip(): int(v) for name, v in re.findall(r"  phase (.+?) +(\d+)\n", s)}
+    assert sum(phases.values()) in range(total - len(phases), total + 1), "the phases should add up"
+    return {"phases": phases, "total": of, "tokens": stories_run(f"profile/{log}")["tokens"]}
 
 
 def header_dims():
@@ -288,6 +300,15 @@ def values():
     p_d = runs["llm-demo-firesim"][0]
     j_g, j_c = p_g * g["mean"] / hz, p_c * c["mean"] / hz  # joules per token of the emulator's core rail
 
+    pg, pc = profile("stories-gemmini.uartlog"), profile("stories-cpu.uartlog")
+    assert pg["tokens"] == pc["tokens"] == g["tokens"], "the profiling runs should give the same tokens"
+    assert list(pg["phases"]) == list(pc["phases"])
+    kv = lambda r: r["phases"]["quantize KV cache"] + r["phases"]["copy KV cache"]
+    share = lambda r, k: 100 * r["phases"][k] / r["total"]
+    outside = lambda r: r["total"] - sum(r["phases"][k] for k in GEMM_PHASES)  # everything but the GEMM calls
+    assert all(pc["phases"][k] == 0 for k in GEMM_PHASES[1:]), "the core backend has no copies around its loop"
+    profile_chart(pg, pc)
+
     mruns, mac_idle, machine = mac()
     by = {r["name"]: r for r in mruns}
     c1 = by["c-int8-1core"]
@@ -305,6 +326,26 @@ def values():
     f = lambda x: f"{x:,.0f}"
     M = lambda x: f"{x / 1e6:.2f}M"
     v = {
+        "profile_rows": "\n".join(
+            f"| {k} | {f(pg['phases'][k])} | {share(pg, k):.1f}% | {f(pc['phases'][k])} | {share(pc, k):.1f}% |"
+            for k in sorted(pg["phases"], key=lambda k: -pg["phases"][k])),
+        "pg_total": f(pg["total"]), "pc_total": f(pc["total"]),
+        "pg_overhead": f"{100 * (pg['total'] / g['mean'] - 1):+.1f}", "pc_overhead": f"{100 * (pc['total'] / c['mean'] - 1):+.1f}",
+        "pg_kv_pct": f"{100 * kv(pg) / pg['total']:.0f}", "pg_kv_m": M(kv(pg)),
+        "pg_mult_pct": f"{share(pg, 'gemm: multiply'):.0f}", "pg_mult_m": M(pg["phases"]["gemm: multiply"]),
+        "pg_gemm_io_pct": f"{sum(share(pg, k) for k in GEMM_PHASES[1:]):.0f}",
+        "pg_gemm_io_m": M(sum(pg["phases"][k] for k in GEMM_PHASES[1:])),
+        "pg_rocket_m": M(pg["total"] - pg["phases"]["gemm: multiply"]),
+        "pg_rocket_pct": f"{100 - share(pg, 'gemm: multiply'):.0f}",
+        "pc_mult_m": M(pc["phases"]["gemm: multiply"]),
+        "mult_x": f"{pc['phases']['gemm: multiply'] / pg['phases']['gemm: multiply']:.0f}",
+        "pg_quant_pct": f"{share(pg, 'quantize activations'):.0f}",
+        "pg_small_pct": f"{sum(share(pg, k) for k in ('softmax', 'swiglu', 'rope')):.0f}",
+        "pg_rope_pct": f"{share(pg, 'rope'):.0f}",
+        "core_same_pct": f"{100 * abs(outside(pg) / outside(pc) - 1):.1f}",
+        "core_phase_max_pct": f"{max(100 * abs(pg['phases'][k] / pc['phases'][k] - 1) for k in pg['phases'] if k not in GEMM_PHASES):.0f}",
+        "pg_float_pct": f"{sum(share(pg, k) for k in ('rope', 'quantize activations', 'quantize q and scores', 'softmax', 'swiglu')):.0f}",
+        "pg_without_kv_m": M(pg["total"] - kv(pg)), "pg_without_kv_x": f"{pg['total'] / (pg['total'] - kv(pg)):.1f}",
         "machine": machine, "mac_idle_mw": f"{mac_idle * 1e3:.0f}",
         "mac_rows": "\n".join(
             f"| {r['label']} | {r['tps']:,.0f} | {r['watts']:.1f} W (CPU {r['cpu_w']:.1f}, GPU {r['gpu_w']:.1f}) | {r['mj']:.2f} mJ |"
@@ -425,6 +466,64 @@ def charts(g, c, prompt, g_gemm, c_gemm, hz, util_perf, util_llm, perf_dims):
     ax.set_title("Gemmini utilization on the FPGA")
     fig.tight_layout()
     fig.savefig(OUT / "gemmini-utilization.png", dpi=150)
+    plt.close("all")
+
+
+GEMM_PHASES = ["gemm: multiply", "gemm: copy operands in", "gemm: convert results out"]
+PHASE_GROUPS = [  # chart groups of the profile's phases, in stacking order
+    ("GEMM: the multiply", ["gemm: multiply"], "#b2182b"),
+    ("GEMM call: copy operands in, convert results out", GEMM_PHASES[1:], "#f4a582"),
+    ("KV cache: copy and quantize", ["copy KV cache", "quantize KV cache"], "#ff7f0e"),
+    ("quantize activations, q and scores", ["quantize activations", "quantize q and scores"], "#ffd92f"),
+    ("softmax", ["softmax"], "#2ca02c"),
+    ("RoPE", ["rope"], "#98df8a"),
+    ("SwiGLU", ["swiglu"], "#9467bd"),
+    ("the rest", ["rmsnorm", "residual and embedding", "argmax", "other"], "0.75"),
+]
+
+
+def bracket(ax, x0, x1, y, label, below):
+    """A horizontal bracket over [x0, x1], its ticks pointing at the bar, with a label outside."""
+    d = 0.08 if below else -0.08  # the axis is inverted: +y is down
+    ax.plot([x0, x0, x1, x1], [y - d, y, y, y - d], color="0.25", lw=1.1, clip_on=False)
+    narrow = x1 - x0 < 1  # a label wider than its bracket starts at the bracket's left end
+    ax.text(x0 + 0.04 if narrow else (x0 + x1) / 2, y + (0.07 if below else -0.07), label, ha="left" if narrow else "center",
+            va="top" if below else "bottom", fontsize=9)
+
+
+def profile_chart(pg, pc):
+    """Two bars, one per build, with brackets saying what runs on Rocket and what on Gemmini (the
+    time in its calls: Rocket issues the work and waits). The multiply comes first in both."""
+    bars = [("Rocket core only", pc, 0.0), ("Rocket + Gemmini", pg, 1.6)]
+    fig, ax = plt.subplots(figsize=(9.5, 4.4))
+    ys = [b[2] for b in bars]
+    left = [0.0] * len(bars)
+    for label, keys, color in PHASE_GROUPS:
+        vals = [sum(r["phases"][k] for k in keys) / 1e6 for _, r, _ in bars]
+        if label == "GEMM: the multiply":
+            label = "GEMM: the multiply (Gemmini, or the core's loop)"
+        ax.barh(ys, vals, left=left, height=0.5, color=color, edgecolor="white", linewidth=0.5, label=label)
+        for y, l, v in zip(ys, left, vals):
+            if v > 0.4:
+                ax.text(l + v / 2, y, f"{v:.2f}M", ha="center", va="center", fontsize=8,
+                        color="white" if color in ("#b2182b", "#ff7f0e", "#9467bd") else "black")
+        left = [a + b for a, b in zip(left, vals)]
+    for y, t in zip(ys, left):
+        ax.text(t + 0.08, y, f"{t:.2f}M", va="center")
+
+    mult = pg["phases"]["gemm: multiply"] / 1e6
+    bracket(ax, 0, left[0], ys[0] + 0.3, f"all on Rocket: {left[0]:.2f}M", below=True)
+    bracket(ax, 0, mult, ys[1] + 0.3, f"on Gemmini: {mult:.2f}M", below=True)
+    bracket(ax, mult, left[1], ys[1] - 0.3, f"on Rocket: {left[1] - mult:.2f}M", below=False)
+
+    ax.set_yticks(ys, [b[0] for b in bars])
+    ax.set_ylim(ys[1] + 0.75, ys[0] - 0.45)  # inverted: the core-only build on top
+    ax.set_xlim(0, max(left) * 1.12)
+    ax.set_xlabel("million cycles per generated token (mean over 30 tokens)")
+    ax.set_title("Profile on the F2 FPGA: where a token's cycles go")
+    ax.legend(frameon=False, fontsize=8, ncol=2, loc="upper center", bbox_to_anchor=(0.45, -0.18))
+    fig.tight_layout()
+    fig.savefig(OUT / "profile.png", dpi=150, bbox_inches="tight")
     plt.close("all")
 
 

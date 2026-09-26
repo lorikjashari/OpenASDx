@@ -76,6 +76,8 @@ void backend_gemm_i8_o8(const int8_t *A, const int8_t *B, float *C,
   if (M * K > O8_MAX_A || K * N > O8_MAX_B || M * N > O8_MAX_C)
     abort();
 
+  if (backend_part_hook)
+    backend_part_hook(BACKEND_PART_COPY_IN);
   memcpy(o8_a, A, (size_t)M * (size_t)K);
   if (trans_b) {
     for (int n = 0; n < N; n++)
@@ -85,6 +87,8 @@ void backend_gemm_i8_o8(const int8_t *A, const int8_t *B, float *C,
     memcpy(o8_b, B, (size_t)K * (size_t)N);
   }
 
+  if (backend_part_hook)
+    backend_part_hook(BACKEND_PART_MULTIPLY);
   tiled_matmul_auto((size_t)M, (size_t)N, (size_t)K,
                     o8_a, o8_b, NULL, o8_c,
                     (size_t)K, (size_t)N, 0, (size_t)N,
@@ -93,6 +97,8 @@ void backend_gemm_i8_o8(const int8_t *A, const int8_t *B, float *C,
                     false, false, false, false, false, 0, WS);
   gemmini_fence();
 
+  if (backend_part_hook)
+    backend_part_hook(BACKEND_PART_COPY_OUT);
   for (int i = 0; i < M * N; i++)
     C[i] = (float)o8_c[i] * out_scale;
 }

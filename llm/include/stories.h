@@ -26,6 +26,13 @@ void stories_set_clock(unsigned long (*clock)(void));
 unsigned long stories_position_cycles(int pos);
 unsigned long stories_position_gemm_cycles(int pos);
 
+/* Built with -DSTORIES_PROFILE (and a clock): the cycles of the generated tokens' positions, split
+   by phase of the forward pass, since the last stories_generate() started. Without it,
+   stories_phases() is 0. The phases add up to the positions' cycles. */
+int stories_phases(void);
+const char *stories_phase_name(int i);
+unsigned long stories_phase_cycles(int i);
+
 /* Optional callback, called with each new token as soon as it is chosen (after its position's
    cycles are recorded). A nonzero return stops the generation there. */
 void stories_set_on_token(int (*fn)(int token));

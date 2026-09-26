@@ -10,7 +10,7 @@ We ran a small language model on a real FPGA, with every matrix multiplication (
 - **It's faster.** A token takes **{{g_cycles_m}} cycles with Gemmini, against {{c_cycles_m}} on the RISC-V core alone**. That's {{speedup}}× end to end, and about {{gemm_speedup}}× on the GEMMs themselves. At the FPGA's {{mhz}} MHz, that's **{{g_tps}} tokens/s against {{c_tps}}**.
 - **The hardware is sound.** Every Gemmini bare-metal test within the prebuilt image's features passes on the FPGA ({{n_pass}} of {{n_tests}}), and a large matmul reaches **{{util_perf}}% of peak**.
 - **Against a laptop:** one core of an {{machine}} runs the same C code {{c1_vs_fpga_speed}}× faster, mostly thanks to its clock, and at about {{fpga_vs_c1_energy}}× less energy per token than the FPGA, which is emulating the chip. Its GPU wins only with 1,024 sequences at once (see "Against a laptop").
-- **The bottleneck is now software.** With Gemmini doing the GEMMs, {{g_rest_pct}}% of a token's cycles go to work on the core, and the GEMMs use only {{util_llm}}% of Gemmini's peak, because decoding multiplies one vector at a time. Both problems have known fixes, listed under "What's next".
+- **The bottleneck is now software.** With Gemmini doing the GEMMs, {{g_rest_pct}}% of a token's cycles go to work on the core, and the GEMMs use only {{util_llm}}% of Gemmini's peak, because decoding multiplies one vector at a time. A profile on the FPGA shows that **the Gemmini calls take only {{pg_mult_pct}}% of a token, and {{pg_kv_pct}}% goes to copying and re-quantizing the KV cache**. Both problems have known fixes, listed under "What's next".
 
 Prompt: **"{{prompt}}"**. What the model wrote on the FPGA:
 
@@ -90,7 +90,7 @@ Everything is reproducible from the repo: `docker/`, `llm/` and `aws/`.
 
 ![Cycles per position](img/report/cycles-per-position.png)
 
-Every position costs more than the one before it, about {{g_slope_k}} cycles more with Gemmini and {{c_slope_k}} more without. The attention reads the growing KV cache. The GEMMs over that cache grow by only {{attn_per_pos}} MACs per position, so the growth is almost all the core re-quantizing and repacking the cache at every step.
+Every position costs more than the one before it, about {{g_slope_k}} cycles more with Gemmini and {{c_slope_k}} more without. The attention reads the growing KV cache. The GEMMs over that cache grow by only {{attn_per_pos}} MACs per position, so the growth is almost all the core re-quantizing and repacking the cache at every step. The profile below measures it.
 
 ![Where a token's cycles go](img/report/cycles-breakdown.png)
 
@@ -105,6 +105,25 @@ Every position costs more than the one before it, about {{g_slope_k}} cycles mor
 ![Tokens per second](img/report/tokens-per-second.png)
 
 The cycle counts come from the core's `rdcycle` counter. They are cycles of the actual RTL, so they don't depend on the FPGA's clock. The {{proj_ghz}} GHz column only rescales them to show what a clock typical of a real chip would give. It is not a measurement. The GEMM shares are the rounded percentages the binary prints, so the GEMM-only speedup is about {{gemm_speedup}}×.
+
+### Profile: where the core's cycles go
+
+To see what the core spends its cycles on, a profiling build of the same program charges every cycle of a position to the phase it's spent in (`-DSTORIES_PROFILE` in `llm/src/stories.c`, one `rdcycle` at each switch). The phases add up exactly to each position's cycles. Inside a GEMM call, the Gemmini backend reports its three parts: copying the operands into its buffers, the multiply (Rocket issues the work to Gemmini and waits for it), and converting the int8 results to float. We ran it once with Gemmini and once on the Rocket core alone (`llm/fpga/f2/results/profile/`, #56). Both gave the same tokens as every other run.
+
+![Profile on the FPGA](img/report/profile.png)
+
+| phase, cycles per generated token | Rocket + Gemmini | | Rocket core only | |
+|---|---:|---:|---:|---:|
+{{profile_rows}}
+| **total** | **{{pg_total}}** | | **{{pc_total}}** | |
+
+- **The KV cache is the biggest cost: {{pg_kv_pct}}% of a token with Gemmini** ({{pg_kv_m}} cycles, copying and quantizing it). Before the two attention GEMMs of each head, the core copies that head's cached K and V into a contiguous block, and quantizes both to int8 with one scale. It does this at every position, for every cached position, which is also why each position costs more than the one before it.
+- **The Gemmini calls take only {{pg_mult_pct}}% of a token** ({{pg_mult_m}} cycles: Rocket issuing the work, and waiting for Gemmini to finish), so {{pg_rocket_pct}}% is Rocket's own work. The multiply is {{mult_x}}× faster on Gemmini than the core's loop ({{pc_mult_m}}). But the backend's copies around it cost more than the multiply: {{pg_gemm_io_m}} ({{pg_gemm_io_pct}}%). On every call, it copies the activations and the whole B matrix (the weights, or the int8 K and V) into aligned buffers, transposing K on the way, and it converts the int8 results to float.
+- **Quantizing the other GEMM inputs** (activations, q and the softmax scores) costs about as much again.
+- **Softmax, SwiGLU and RoPE take {{pg_small_pct}}% together.** They're float math with `expf`, `powf`, `sinf` and `cosf` on a core with no vector unit. RoPE recomputes the same sines and cosines at every call ({{pg_rope_pct}}%).
+- **Only the GEMM calls change between the two builds.** All the other phases together cost the same within {{core_same_pct}}%, and each within {{core_phase_max_pct}}%, as they should: the same code runs on the same core.
+
+The timers cost little: the profiled runs' totals are {{pg_overhead}}% (Gemmini) and {{pc_overhead}}% (core only) off the unprofiled runs in "Speed". We use the profile for the shares, and the runs in "Speed" for the headline numbers.
 
 ### Compute
 
@@ -251,7 +270,7 @@ We chose the prebuilt image over building our own bitstream, which takes several
 4. The core scales them by 1/√d and applies the softmax.
 5. Gemmini computes probabilities × V (a second GEMM), and then the output projection.
 
-The {{heads}} query heads share {{kv_heads}} KV heads (grouped-query attention). Before each GEMM, the core quantizes the inputs to int8, which for attention means the whole cached K and V at every position. That's the main cost outside the GEMMs.
+The {{heads}} query heads share {{kv_heads}} KV heads (grouped-query attention). Before each GEMM, the core quantizes the inputs to int8, which for attention means the whole cached K and V at every position. With the copying before it, that's the biggest single cost of a token: {{pg_kv_pct}}% with Gemmini, measured on the FPGA ("Profile").
 
 **Where do the weights come from, and how do they get onto the FPGA?**
 1. The float checkpoint is karpathy/tinyllamas' `stories260K.bin`, trained on TinyStories.
@@ -279,17 +298,19 @@ From then on, nothing comes from outside until the text goes out through the UAR
 1. **An open-source hardware stack can run an LLM end to end.** Every piece is open: the RISC-V core, the accelerator, the SoC generator and the FPGA simulation framework. The same RISC-V binary runs on a functional simulator and on a real FPGA, with identical results.
 2. **Integer accelerators work for LLM inference without retraining.** A static int8 calibration of an off-the-shelf model costs {{ppl_cost}} of perplexity and keeps {{top1_lean}}% of top-1 choices, even with the strictest read-out (int8 out).
 3. **Checking bit for bit is cheap and catches real bugs.** Running every GEMM on both backends in the same binary found a sign-of-zero mismatch that comparing tokens would have missed.
-4. **For decoding, the accelerator isn't the bottleneck.** The GEMMs speed up {{gemm_speedup}}×, but the whole model only {{speedup}}×, because what's left on the core (the cache handling, softmax and norms) now dominates. Gemmini itself runs at {{util_llm}}% of peak on one-row GEMMs, against {{util_perf}}% on a large matmul. Batch-1 decode on a systolic array is limited by per-call overhead and by the shape of the matrices, not by compute.
+4. **For decoding, the accelerator isn't the bottleneck.** The GEMMs speed up {{gemm_speedup}}×, but the whole model only {{speedup}}×, because what's left on the core now dominates: {{pg_kv_pct}}% of a token is copying and re-quantizing the KV cache alone, by the FPGA profile. Gemmini itself runs at {{util_llm}}% of peak on one-row GEMMs, against {{util_perf}}% on a large matmul. Batch-1 decode on a systolic array is limited by per-call overhead and by the shape of the matrices, not by compute.
 
 ## What's next
 
 In order of expected gain:
 
-1. **Keep the KV cache in int8.** The core then stops re-quantizing the whole cache at every position. This should remove most of the {{g_rest_m}} cycles per token spent outside the GEMMs.
-2. **Batch sequences** (M up to 16) to fill the array's rows, or fuse the GEMMs that share an input: Q, K and V into one, and W1 and W3 into another.
-3. **Keep the weights on chip.** Pin the most-used layers in the scratchpad, instead of moving them in on every call.
-4. **A bigger model** (#21) and the full Gemmini config (#10: int32 read-out, 110 MHz), for numbers closer to a real workload.
-5. **The rest of Gemmini's tests** on the FPGA (#11), and a cycle-accurate RTL run in Verilator (#25).
+1. **Keep the KV cache in int8.** The core then stops copying and re-quantizing the whole cache at every position, which the profile puts at {{pg_kv_m}} cycles per token, {{pg_kv_pct}}%. Removing all of it would leave {{pg_without_kv_m}} cycles per token, {{pg_without_kv_x}}× faster. That's an upper bound: an int8 cache needs a scale per cached position, and the attention GEMMs then have to apply them.
+2. **Drop the copies around the GEMMs** ({{pg_gemm_io_m}} cycles per token, {{pg_gemm_io_pct}}%). Gemmini's DMA reads rows with a stride, so it could probably read the weights where they are, and K could be cached already transposed.
+3. **Cheaper float work on the core.** Precompute RoPE's sines and cosines, and quantize activations in fewer passes. With softmax and SwiGLU, the core's float work outside the KV cache is {{pg_float_pct}}% of a token.
+4. **Batch sequences** (M up to 16) to fill the array's rows, or fuse the GEMMs that share an input: Q, K and V into one, and W1 and W3 into another.
+5. **Keep the weights on chip.** Pin the most-used layers in the scratchpad, instead of moving them in on every call.
+6. **A bigger model** (#21) and the full Gemmini config (#10: int32 read-out, 110 MHz), for numbers closer to a real workload.
+7. **The rest of Gemmini's tests** on the FPGA (#11), and a cycle-accurate RTL run in Verilator (#25).
 
 ## Reproduce
 
@@ -299,5 +320,6 @@ docker/dev.sh check                      # Gemmini's tests on Spike (docker/READ
 make -C llm test-spike                   # stories260K on Spike, every GEMM checked
 # FPGA: aws/README.md sets up the manager and the F2, then, on the manager:
 bash ~/fpga-batch.sh llm-stories-gemmini-baremetal llm-stories-cpu-baremetal
+bash ~/fpga-batch.sh llm-profile-gemmini-baremetal llm-profile-cpu-baremetal   # the profile
 llm/tools/.venv/bin/python llm/tools/report.py          # this report, its numbers and charts
 ```

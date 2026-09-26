@@ -15,4 +15,6 @@ llm-encode
 llm-chat
 llm-chat-firesim
 llm-bench
+llm-profile
+llm-profile-*-baremetal
 build-riscv/

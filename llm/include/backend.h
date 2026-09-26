@@ -31,4 +31,10 @@ void backend_gemm_i8_o8(const int8_t *A, const int8_t *B, float *C,
    Single backends return -1: nothing was compared. */
 long backend_mismatches(void);
 
+/* Profiling (#56): a backend that does work around the multiply itself calls this hook as a GEMM
+   call moves from one part to the next. stories.c defines it, and sets it only in its profiling
+   build; otherwise it is NULL. */
+enum { BACKEND_PART_COPY_IN, BACKEND_PART_MULTIPLY, BACKEND_PART_COPY_OUT };
+extern void (*backend_part_hook)(int part);
+
 #endif

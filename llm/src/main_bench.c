@@ -56,6 +56,13 @@ int main(int argc, char **argv) {
          backend_name(), gens, toks, wall, (double)gen_ns / toks, toks / (gen_ns / 1e9), t_start, t_end);
   for (int i = 0; i < np + n; i++)
     printf("%s%d", i ? ", " : "", tokens[i]);
-  printf("]}\n");
+  printf("]");
+  if (stories_phases()) { /* the profiling build (#56): the last generation's ns per token, by phase */
+    printf(", \"ns_per_token_by_phase\": {");
+    for (int i = 0; i < stories_phases(); i++)
+      printf("%s\"%s\": %.0f", i ? ", " : "", stories_phase_name(i), (double)stories_phase_cycles(i) / n);
+    printf("}");
+  }
+  printf("}\n");
   return 0;
 }
