@@ -224,31 +224,38 @@ def generate(m, gemm, prompt_toks, n):
 
 # ---------------------------------------------------------------- main
 
+def load():
+    """The model and tokenizer, downloaded on first use."""
+    WEIGHTS.mkdir(parents=True, exist_ok=True)
+    for f in FILES:
+        if not (WEIGHTS / f).exists():
+            print(f"downloading {f}")
+            subprocess.run(["curl", "-fsSL", "-o", str(WEIGHTS / f), URL + f], check=True)
+    m = Model(WEIGHTS / "stories260K.bin")
+    return m, Tokenizer(WEIGHTS / "tok512.bin", m.vocab)
+
+
+def calibrate(m, tok, how="max"):
+    """One static output scale per GEMM, from a float pass over CALIB_PROMPTS."""
+    rec = {}
+    for p in CALIB_PROMPTS:
+        forward(m, Gemm("float", record=rec), tok.encode(p))
+    if how == "max":
+        return {k: float(np.max(np.concatenate(v))) / 127.0 for k, v in rec.items()}
+    pct = float(how.lstrip("p"))
+    return {k: float(np.percentile(np.concatenate(v), pct)) / 127.0 for k, v in rec.items()}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--calib", default="max", help="'max' or a percentile such as 'p99.9'")
     ap.add_argument("--gen", type=int, default=40, help="tokens to generate per prompt")
     args = ap.parse_args()
 
-    WEIGHTS.mkdir(parents=True, exist_ok=True)
-    for f in FILES:
-        if not (WEIGHTS / f).exists():
-            print(f"downloading {f}")
-            subprocess.run(["curl", "-fsSL", "-o", str(WEIGHTS / f), URL + f], check=True)
-
-    m = Model(WEIGHTS / "stories260K.bin")
-    tok = Tokenizer(WEIGHTS / "tok512.bin", m.vocab)
+    m, tok = load()
     print(f"stories260K: dim {m.dim}, hidden {m.hidden}, layers {m.n_layers}, heads {m.n_heads}/{m.n_kv}, "
           f"vocab {m.vocab}, shared classifier {m.shared}")
-
-    rec = {}
-    for p in CALIB_PROMPTS:
-        forward(m, Gemm("float", record=rec), tok.encode(p))
-    if args.calib == "max":
-        scales = {k: float(np.max(np.concatenate(v))) / 127.0 for k, v in rec.items()}
-    else:
-        pct = float(args.calib.lstrip("p"))
-        scales = {k: float(np.percentile(np.concatenate(v), pct)) / 127.0 for k, v in rec.items()}
+    scales = calibrate(m, tok, args.calib)
     print(f"calibrated {len(scales)} static output scales ({args.calib}) on {len(CALIB_PROMPTS)} prompts")
 
     ev = tok.encode(EVAL_TEXT)

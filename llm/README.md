@@ -22,6 +22,16 @@ Dimensions match a 16-wide systolic array: hidden 64, 4 heads of 16, FFN 128, 2 
 | MLP ReLU | Gemmini, the RELU activation on the store |
 | Embed, RMSNorm, RoPE, softmax, residual, KV cache | the Rocket RISC-V core next to Gemmini, also on the FPGA |
 
+## The model: stories260K
+
+The demo model is the pretrained `stories260K` (tinyllamas, llama2.c), not the random-weight decoder in `src/model.c`. `weights/TASK.md` has the job, the example and the quality numbers.
+
+```shell
+make stories    # downloads the checkpoint, quantizes, calibrates, writes weights/stories260k.h
+```
+
+`tools/stories_int8.py` compares the model in float and int8 under Gemmini's GEMM contracts. `tools/export_stories.py` writes the C header, then checks it by reading it back. Both need only numpy, and `make stories` creates `tools/.venv` for them. Porting the architecture into `src/model.c` is #6.
+
 ## Every matmul goes through one GEMM call
 
 Each matmul in `src/model.c` calls `backend_gemm_i8` (`include/backend.h`), either directly or through `linear()`, which calls it at line 123. No matmul bypasses the backend. Shapes are `C[M, N] = A[M, K] · B[K, N]` for one token at position `pos`, with `len = pos + 1`.
