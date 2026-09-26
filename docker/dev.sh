@@ -7,7 +7,7 @@
 #   docker/dev.sh check     run a hello world and Gemmini's bare-metal tests on Spike
 #   docker/dev.sh shell     open a shell in the running container (starts it if needed)
 #   docker/dev.sh stop      stop and remove the container (the Chipyard volume is kept)
-# OPENASDX_IMAGE, OPENASDX_CONTAINER and OPENASDX_VOLUME override the names below.
+# OPENASDX_IMAGE, OPENASDX_CONTAINER and OPENASDX_VOLUME override the default names (openasdx-dev, openasdx, chipyard).
 # This repo is mounted at /work/OpenASDx; the Docker volume "chipyard" is /work/vol (Chipyard in /work/vol/chipyard, log in /work/vol/setup.log).
 set -euo pipefail
 
