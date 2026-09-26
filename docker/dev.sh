@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # Host-side helper for the Chipyard/Gemmini container.
-#   docker/dev.sh build     build the openasdx-dev image
+#   docker/dev.sh build     build the openasdx-dev image (extra arguments go to docker build, e.g. --no-cache)
 #   docker/dev.sh setup     clone + set up Chipyard in the background (log: docker/dev.sh log)
 #                           extra arguments go to build-setup.sh, e.g. "setup -s 1 -s 2 -s 3" resumes at step 5
 #   docker/dev.sh log       follow the setup log
 #   docker/dev.sh check     run a hello world and Gemmini's bare-metal tests on Spike
 #   docker/dev.sh shell     open a shell in the running container (starts it if needed)
 #   docker/dev.sh stop      stop and remove the container (the Chipyard volume is kept)
+# OPENASDX_IMAGE, OPENASDX_CONTAINER and OPENASDX_VOLUME override the names below.
 # This repo is mounted at /work/OpenASDx; the Docker volume "chipyard" is /work/vol (Chipyard in /work/vol/chipyard, log in /work/vol/setup.log).
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE=openasdx-dev
-NAME=openasdx
-VOLUME=chipyard
+# Override these to run a second setup next to the first one.
+IMAGE="${OPENASDX_IMAGE:-openasdx-dev}"
+NAME="${OPENASDX_CONTAINER:-openasdx}"
+VOLUME="${OPENASDX_VOLUME:-chipyard}"
 
 start() {
     if ! docker container inspect "$NAME" >/dev/null 2>&1; then
@@ -28,8 +30,9 @@ start() {
 
 case "${1:-shell}" in
     build)
+        shift
         docker build --platform linux/amd64 --build-arg UID="$(id -u)" --build-arg GID="$(id -g)" \
-            -t "$IMAGE" "$REPO_DIR/docker"
+            -t "$IMAGE" "$@" "$REPO_DIR/docker"
         ;;
     setup)
         shift
@@ -53,7 +56,7 @@ case "${1:-shell}" in
         docker rm -f "$NAME" >/dev/null && echo "stopped (volume $VOLUME kept)"
         ;;
     *)
-        sed -n '2,10p' "$0"
+        sed -n '2,11p' "$0"
         exit 2
         ;;
 esac
