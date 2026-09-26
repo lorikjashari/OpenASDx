@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch a FireSim manager: a c5.4xlarge with FireSim's F2 AMI and a 300 GB disk, in Frankfurt,
+# Launch a FireSim manager: a c5.4xlarge with AWS's FPGA Developer AMI and a 300 GB disk, in Frankfurt,
 # with sshd on 22 and 443. It has no FPGA; it builds software and drives the F2.
 # Usage: aws/launch-manager.sh [name]     (default name: ogsa-firesim-manager)
 # Needs an AWS CLI profile for the project (AWS_PROFILE). It costs money until you stop it.

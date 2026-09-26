@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch a FireSim run host: an f2.6xlarge (one FPGA) with FireSim's F2 AMI, in Frankfurt.
+# Launch a FireSim run host: an f2.6xlarge (one FPGA) with AWS's FPGA Developer AMI, in Frankfurt.
 # FireSim can't launch it under our IAM policy, so we launch it here and give FireSim its private
 # IP as an externally provisioned host.
 # Usage: aws/launch-run-host.sh [name]    (default name: ogsa-firesim-f2)
