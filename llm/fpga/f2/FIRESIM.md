@@ -74,6 +74,10 @@ Tests that fail, because they need a feature Lean doesn't have:
 
 The `*** PASSED *** after N cycles` line covers the whole simulation (about 40M to 500M cycles here), including loading the program and the test's own setup. Use the `Cycles taken` or `took` lines instead.
 
+### Power
+
+During the runs, the FPGA's core rail draws about 4–5 W, against 3 W when loaded and idle. That's the FPGA emulating the chip, not a Gemmini chip. The samples are in `results/power/`, and the analysis is in `REPORT.md`, "FPGA power".
+
 ## Reproduce
 
 These steps assume the manager and the F2 are running, and that `firesim infrasetup` has worked once (`aws/README.md`). On the manager:
