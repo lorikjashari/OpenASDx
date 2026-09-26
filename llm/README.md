@@ -26,9 +26,7 @@ Dimensions match a 16-wide systolic array: hidden 64, 4 heads of 16, FFN 128, 2 
 
 The demo model is the pretrained `stories260K` (tinyllamas, llama2.c), not the random-weight decoder in `src/model.c`. `weights/TASK.md` has the job, the example and the quality numbers.
 
-```shell
-make stories    # downloads the checkpoint, quantizes, calibrates, writes weights/stories260k.h
-```
+The frozen model is `weights/stories260k.h`: int8 weights and calibrated scales, committed, with its SHA-256 in `weights/TASK.md`. `make stories` re-exports it, but only run that on purpose.
 
 `tools/stories_int8.py` compares the model in float and int8 under Gemmini's GEMM contracts. `tools/export_stories.py` writes the C header, then checks it by reading it back. Both need only numpy, and `make stories` creates `tools/.venv` for them. Porting the architecture into `src/model.c` is #6.
 
