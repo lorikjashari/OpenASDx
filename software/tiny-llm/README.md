@@ -1,5 +1,9 @@
 # tiny-llm
 
+The F2-ready tree is `llm/` at the repo root. This directory is the earlier Spike-side copy.
+
+
+
 A decoder-only inference graph sized for Gemmini. It runs on the host CPU today. Every matrix multiply goes through `backend_gemm_i8`, which has a Gemmini implementation in `src/backend_gemmini.c`.
 
 Dimensions are multiples of the default systolic array (`DIM = 16`): hidden 64, 4 heads of 16, FFN 128, 2 layers, context 32, vocab 64.
