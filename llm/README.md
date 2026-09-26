@@ -1,6 +1,6 @@
 # llm
 
-Decoder used by this project. Matrix multiplies are the only work that moves onto the accelerator. Everything else stays on the CPU of whatever machine is hosting it.
+The first target is an open inference accelerator built around one width-16 matrix engine with int8 inputs, int32 accumulation, ReLU on the store path, and host-readable results. Attention maps to two matmuls on that same engine, while the host keeps softmax and the KV cache.
 
 ```
 llm/
