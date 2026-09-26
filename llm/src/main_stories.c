@@ -98,6 +98,15 @@ int main(void) {
   for (int pos = 0; pos < n - 1; pos++)
     printf(" %lu", stories_position_cycles(pos));
   printf("\n");
+  /* The profiling build (#56): where the generated tokens' cycles go, per token. */
+  if (stories_phases()) {
+    unsigned long sum = 0;
+    for (int i = 0; i < stories_phases(); i++)
+      sum += stories_phase_cycles(i);
+    printf("cycles per generated token by phase (they add up to %lu of %lu):\n", sum / gen, tot / gen);
+    for (int i = 0; i < stories_phases(); i++)
+      printf("  phase %-28s %lu\n", stories_phase_name(i), stories_phase_cycles(i) / gen);
+  }
 #endif
   printf("tokens:");
   for (int i = 0; i < n; i++)

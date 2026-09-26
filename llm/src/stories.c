@@ -28,14 +28,54 @@ static unsigned long gemm_cycles;
 /* Optional callback for each new token (stories_set_on_token). */
 static int (*on_token_fn)(int token);
 
+/* Built with -DSTORIES_PROFILE: every cycle of a position is charged to the phase it was spent in,
+   with one clock read at each switch. The cycles of the generated tokens' positions add up in
+   gen_phase_cycles. */
+static const char *const phase_names[] = {
+  "gemm: multiply", "gemm: copy operands in", "gemm: convert results out", "quantize activations", "copy KV cache", "quantize KV cache", "quantize q and scores",
+  "softmax", "rmsnorm", "rope", "swiglu", "residual and embedding", "argmax", "other"};
+enum { PH_GEMM, PH_GEMM_IN, PH_GEMM_OUT, PH_QUANT_X, PH_KV_COPY, PH_KV_QUANT, PH_ATT_QUANT, PH_SOFTMAX, PH_RMSNORM, PH_ROPE,
+       PH_SWIGLU, PH_RESIDUAL, PH_ARGMAX, PH_OTHER, N_PHASES };
+_Static_assert(sizeof phase_names / sizeof *phase_names == N_PHASES, "one name per phase");
+#ifdef STORIES_PROFILE
+static unsigned long pos_phase_cycles[N_PHASES], gen_phase_cycles[N_PHASES], phase_mark;
+static int phase_now = PH_OTHER;
+
+/* Charge the cycles since the last switch to the current phase, and enter p. Returns the phase
+   left, so a caller can go back to it. */
+static int phase(int p) {
+  unsigned long t = clock_fn ? clock_fn() : 0;
+  int was = phase_now;
+  pos_phase_cycles[was] += t - phase_mark;
+  phase_mark = t;
+  phase_now = p;
+  return was;
+}
+
+/* The backend's parts of a GEMM call (backend.h). A backend that never calls the hook charges its
+   whole call to the multiply. */
+static void backend_part(int part) {
+  phase(part == BACKEND_PART_COPY_IN ? PH_GEMM_IN : part == BACKEND_PART_COPY_OUT ? PH_GEMM_OUT : PH_GEMM);
+}
+void (*backend_part_hook)(int part) = backend_part;
+#else
+static int phase(int p) {
+  (void)p;
+  return 0;
+}
+void (*backend_part_hook)(int part);
+#endif
+
 /* Every matmul goes through here: count it, and time it if a clock is set. */
 static void gemm(const int8_t *A, const int8_t *B, float *C, int M, int N, int K, int trans_b,
                  float acc_scale, float out_scale) {
   gemm_count++;
+  int was = phase(PH_GEMM);
   unsigned long t0 = clock_fn ? clock_fn() : 0;
   backend_gemm_i8_o8(A, B, C, M, N, K, trans_b, acc_scale, out_scale);
   if (clock_fn)
     gemm_cycles += clock_fn() - t0;
+  phase(was);
 }
 
 /* Symmetric int8 with one scale for the whole vector, as q8() in stories_int8.py. */
@@ -58,7 +98,9 @@ static float quantize(const float *x, int n, int8_t *q) {
 static void linear(const float *x, int K, const int8_t *w, float w_scale, int N, float out_scale,
                    float *y) {
   int8_t xq[MAX_K];
+  int was = phase(PH_QUANT_X);
   float a_scale = quantize(x, K, xq);
+  phase(was);
   gemm(xq, w, y, 1, N, K, 0, a_scale * w_scale / out_scale, out_scale);
 }
 
@@ -107,56 +149,76 @@ static void attention(int l, int pos, const float *q, float *ctx) {
 
   for (int h = 0; h < ST_HEADS; h++) {
     const int g = h / KV_MUL;
+    phase(PH_KV_COPY);
     for (int t = 0; t < len; t++)
       for (int i = 0; i < ST_HEAD_DIM; i++) {
         kpack[t * ST_HEAD_DIM + i] = kc[l][t][g * ST_HEAD_DIM + i];
         vpack[t * ST_HEAD_DIM + i] = vc[l][t][g * ST_HEAD_DIM + i];
       }
 
+    phase(PH_ATT_QUANT);
     float qs = quantize(q + h * ST_HEAD_DIM, ST_HEAD_DIM, q8);
+    phase(PH_KV_QUANT);
     float ks = quantize(kpack, len * ST_HEAD_DIM, k8);
     gemm(q8, k8, score, 1, len, ST_HEAD_DIM, 1, qs * ks / st_qk_out_scale[l], st_qk_out_scale[l]);
+    phase(PH_SOFTMAX);
     for (int t = 0; t < len; t++)
       score[t] /= sqrtf((float)ST_HEAD_DIM);
     softmax(score, len);
 
+    phase(PH_ATT_QUANT);
     float ps = quantize(score, len, p8);
+    phase(PH_KV_QUANT);
     float vs = quantize(vpack, len * ST_HEAD_DIM, v8);
     gemm(p8, v8, ctx + h * ST_HEAD_DIM, 1, ST_HEAD_DIM, len, 0, ps * vs / st_av_out_scale[l],
          st_av_out_scale[l]);
   }
+  phase(PH_OTHER);
 }
 
 static void forward(int tok, int pos, float *logits) {
   float x[ST_DIM], h[ST_DIM], q[ST_DIM], ctx[ST_DIM], o[ST_DIM];
   float a1[ST_HIDDEN], a3[ST_HIDDEN];
 
+  phase(PH_RESIDUAL);
   memcpy(x, st_tok_emb + tok * ST_DIM, sizeof(x));
   for (int l = 0; l < ST_LAYERS; l++) {
     const int dd = ST_DIM * ST_DIM, dk = ST_DIM * KV_DIM, dh = ST_DIM * ST_HIDDEN;
 
+    phase(PH_RMSNORM);
     rmsnorm(h, x, st_rms_att + l * ST_DIM);
+    phase(PH_OTHER);
     linear(h, ST_DIM, st_wq + l * dd, st_wq_scale[l], ST_DIM, st_wq_out_scale[l], q);
     linear(h, ST_DIM, st_wk + l * dk, st_wk_scale[l], KV_DIM, st_wk_out_scale[l], kc[l][pos]);
     linear(h, ST_DIM, st_wv + l * dk, st_wv_scale[l], KV_DIM, st_wv_out_scale[l], vc[l][pos]);
+    phase(PH_ROPE);
     rope(q, ST_DIM, pos);
     rope(kc[l][pos], KV_DIM, pos);
+    phase(PH_OTHER);
 
     attention(l, pos, q, ctx);
     linear(ctx, ST_DIM, st_wo + l * dd, st_wo_scale[l], ST_DIM, st_wo_out_scale[l], o);
+    phase(PH_RESIDUAL);
     for (int i = 0; i < ST_DIM; i++)
       x[i] += o[i];
 
+    phase(PH_RMSNORM);
     rmsnorm(h, x, st_rms_ffn + l * ST_DIM);
+    phase(PH_OTHER);
     linear(h, ST_DIM, st_w1 + l * dh, st_w1_scale[l], ST_HIDDEN, st_w1_out_scale[l], a1);
     linear(h, ST_DIM, st_w3 + l * dh, st_w3_scale[l], ST_HIDDEN, st_w3_out_scale[l], a3);
+    phase(PH_SWIGLU);
     for (int i = 0; i < ST_HIDDEN; i++)
       a1[i] = a1[i] / (1.f + expf(-a1[i])) * a3[i]; /* SwiGLU: silu(W1 x) * W3 x */
+    phase(PH_OTHER);
     linear(a1, ST_HIDDEN, st_w2 + l * dh, st_w2_scale[l], ST_DIM, st_w2_out_scale[l], o);
+    phase(PH_RESIDUAL);
     for (int i = 0; i < ST_DIM; i++)
       x[i] += o[i];
   }
+  phase(PH_RMSNORM);
   rmsnorm(h, x, st_rms_final);
+  phase(PH_OTHER);
   linear(h, ST_DIM, st_wcls, st_wcls_scale[0], ST_VOCAB, st_wcls_out_scale[0], logits);
 }
 
@@ -164,22 +226,41 @@ int stories_generate(int *tokens, int prompt_len, int max_new) {
   float logits[ST_VOCAB];
   int n = prompt_len;
   gemm_count = 0;
+#ifdef STORIES_PROFILE
+  memset(gen_phase_cycles, 0, sizeof gen_phase_cycles);
+#endif
   for (int pos = 0; pos < n && n < prompt_len + max_new && n < ST_MAX_SEQ; pos++) {
     unsigned long t0 = clock_fn ? clock_fn() : 0;
     gemm_cycles = 0;
+#ifdef STORIES_PROFILE
+    memset(pos_phase_cycles, 0, sizeof pos_phase_cycles);
+    phase_mark = t0;
+    phase_now = PH_OTHER;
+#endif
     forward(tokens[pos], pos, logits);
     const int produces = pos == n - 1;
     if (produces) {
+      phase(PH_ARGMAX);
       int best = 0;
       for (int i = 1; i < ST_VOCAB; i++)
         if (logits[i] > logits[best])
           best = i;
       tokens[n++] = best;
     }
+    phase(PH_OTHER);
     if (clock_fn) {
+#ifdef STORIES_PROFILE
+      pos_cycles[pos] = phase_mark - t0; /* the last switch ends the position: the phases add up */
+#else
       pos_cycles[pos] = clock_fn() - t0;
+#endif
       pos_gemm_cycles[pos] = gemm_cycles;
     }
+#ifdef STORIES_PROFILE
+    if (produces)
+      for (int i = 0; i < N_PHASES; i++)
+        gen_phase_cycles[i] += pos_phase_cycles[i];
+#endif
     if (produces && on_token_fn && on_token_fn(tokens[n - 1]))
       break;
   }
@@ -202,3 +283,12 @@ void stories_set_clock(unsigned long (*clock)(void)) { clock_fn = clock; }
 void stories_set_on_token(int (*fn)(int token)) { on_token_fn = fn; }
 unsigned long stories_position_cycles(int pos) { return pos_cycles[pos]; }
 unsigned long stories_position_gemm_cycles(int pos) { return pos_gemm_cycles[pos]; }
+
+#ifdef STORIES_PROFILE
+int stories_phases(void) { return N_PHASES; }
+unsigned long stories_phase_cycles(int i) { return gen_phase_cycles[i]; }
+#else
+int stories_phases(void) { return 0; }
+unsigned long stories_phase_cycles(int i) { return (void)i, 0; }
+#endif
+const char *stories_phase_name(int i) { return phase_names[i]; }

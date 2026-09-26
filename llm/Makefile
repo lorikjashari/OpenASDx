@@ -48,6 +48,11 @@ llm-encode: src/main_encode.c src/tokenizer.c include/tokenizer.h weights/tok512
 llm-bench: $(STORIES) src/main_bench.c src/backend_cpu.c
 	$(CC) $(CFLAGS) -Iweights -o $@ src/main_bench.c src/stories.c src/backend_cpu.c $(LDFLAGS)
 
+# The profiling build (#56): the same, with every nanosecond charged to a phase of the forward pass.
+# The clock reads cost time on the host, so this is only a check of the phases, not a benchmark.
+llm-profile: $(STORIES) src/main_bench.c src/backend_cpu.c
+	$(CC) $(CFLAGS) -DSTORIES_PROFILE -Iweights -o $@ src/main_bench.c src/stories.c src/backend_cpu.c $(LDFLAGS)
+
 # The C encoder against Tokenizer.encode() in tools/stories_int8.py.
 test-encoder: llm-encode $(PYTHON)
 	cd tools && $(abspath $(PYTHON)) check_encoder.py
@@ -94,6 +99,19 @@ llm-stories-cpu-baremetal: $(RV_BUILD)/main_stories.o $(RV_BUILD)/stories.o \
 		$(RV_BUILD)/backend_cpu.o $(RV_BUILD)/baremetal.o
 	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
 
+# The profiling builds (#56): the cycles of each phase of the forward pass, one rdcycle per switch.
+$(RV_BUILD)/stories_profile.o: src/stories.c include/backend.h include/stories.h weights/stories260k.h
+	@mkdir -p $(RV_BUILD)
+	$(RV_CC) $(RV_CFLAGS) -DSTORIES_PROFILE -c -o $@ $<
+
+llm-profile-gemmini-baremetal: $(RV_BUILD)/main_stories.o $(RV_BUILD)/stories_profile.o \
+		$(RV_BUILD)/backend_gemmini.o $(RV_BUILD)/baremetal.o
+	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
+
+llm-profile-cpu-baremetal: $(RV_BUILD)/main_stories.o $(RV_BUILD)/stories_profile.o \
+		$(RV_BUILD)/backend_cpu.o $(RV_BUILD)/baremetal.o
+	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
+
 # The demos on bare metal (#7, #52). The Spike build prints through HTIF; the FireSim builds use
 # the chip's UART (CONSOLE_UART), which shows each word at once and takes typed input.
 $(RV_BUILD)/console_uart.o: src/console.c include/console.h include/tokenizer.h weights/tok512.h
@@ -135,5 +153,6 @@ tools/.venv/bin/python:
 
 clean:
 	rm -f llm-cpu llm-f2 llm-f2-sim llm-stories llm-stories-baremetal llm-stories-gemmini-baremetal \
-		llm-stories-cpu-baremetal llm-demo llm-demo-baremetal llm-demo-firesim llm-encode llm-chat llm-chat-firesim llm-bench
+		llm-stories-cpu-baremetal llm-demo llm-demo-baremetal llm-demo-firesim llm-encode llm-chat llm-chat-firesim llm-bench \
+		llm-profile llm-profile-gemmini-baremetal llm-profile-cpu-baremetal
 	rm -rf $(RV_BUILD)
