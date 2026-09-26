@@ -26,4 +26,8 @@ void stories_set_clock(unsigned long (*clock)(void));
 unsigned long stories_position_cycles(int pos);
 unsigned long stories_position_gemm_cycles(int pos);
 
+/* Optional callback, called with each new token as soon as it is chosen (after its position's
+   cycles are recorded). A nonzero return stops the generation there. */
+void stories_set_on_token(int (*fn)(int token));
+
 #endif

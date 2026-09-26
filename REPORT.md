@@ -16,6 +16,12 @@ Prompt: **"Once upon a time"**. What the model wrote on the FPGA:
 
 > Once upon a time, there was a little girl named Lily. She loved to play outside in the park. One day,
 
+### The demo
+
+![stories260K on the F2 FPGA](img/demo/stories260k-fpga.gif)
+
+This is a live recording of the FPGA run (idle pauses shortened to 2 s). The chip prints each word through its UART as soon as it has chosen it. The words arrive faster at first and slower later, because each position costs more than the one before it (see "Speed"). This run generates 100 tokens instead of 30, at 7.0M cycles per token on average, which is 4.2 tokens/s at 30 MHz. The console log is in `llm/fpga/f2/results/demo/`, and `img/demo/README.md` explains how it was recorded.
+
 ## What we built
 
 ```mermaid

@@ -96,6 +96,15 @@ bash ~/fpga-run.sh path/to/program-baremetal
 
 The script wraps the ELF as a FireSim workload, runs `firesim infrasetup` (which copies the workload to the F2), then `firesim runworkload`, and prints the console output. A run takes about 1–1.5 minutes. `llm/fpga/f2/FIRESIM.md` has the stories260K run.
 
+## Record a run
+
+```
+scp aws/manager/fpga-record.sh aws/manager/uart-follow.py ogsa-firesim-manager:~/
+ssh -t ogsa-firesim-manager 'bash -l ~/fpga-record.sh ~/OpenASDx/llm/llm-demo-firesim NAME'
+```
+
+The script flashes the F2 off camera, then records `firesim runworkload` with asciinema while it follows the chip's console live. It writes `~/recordings/NAME.cast` and `NAME.gif`. It needs asciinema in `~/rec-venv` (`python3 -m venv ~/rec-venv && ~/rec-venv/bin/pip install asciinema`) and [`agg`](https://github.com/asciinema/agg/releases) in `~/agg`. `img/demo/README.md` explains the demo recording.
+
 ## Daily use
 
 ```

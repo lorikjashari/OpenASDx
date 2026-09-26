@@ -7,6 +7,10 @@ OpenASDx
 
 OpenASDx runs a small language model on open hardware. The model is stories260K, and **every matrix multiplication runs on [Gemmini](https://github.com/ucb-bar/gemmini)**, UC Berkeley's open-source systolic-array accelerator for RISC-V: first on the Spike simulator, then on a real **AWS F2 FPGA** through FireSim. This repository is our Gemmini fork, built for the hackathon "Towards an Open-Source GPU for Science".
 
+![stories260K writing a story on the AWS F2 FPGA, every matmul on Gemmini](img/demo/stories260k-fpga.gif)
+
+*stories260K on the real FPGA, recorded live: the chip prints each word as soon as it has chosen it (`llm-demo-firesim`, [img/demo/](img/demo/README.md)).*
+
 **Read the results in [REPORT.md](REPORT.md).** In short, on the FPGA:
 <!-- report:summary start (written by llm/tools/report.py) -->
 - all 3,944 GEMMs of a generation are bit-identical to the CPU reference;
