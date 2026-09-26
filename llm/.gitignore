@@ -2,6 +2,9 @@ tools/.venv/
 weights/stories260K/
 __pycache__/
 llm-stories
+llm-cpu
+llm-f2
+llm-f2-sim
 llm-stories-baremetal
 llm-stories-gemmini-baremetal
 llm-stories-cpu-baremetal
