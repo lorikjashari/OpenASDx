@@ -1,10 +1,10 @@
 /* The demo: stories260K continues the prompt one word at a time, printing each word as soon as the
    chip has chosen it. On the FPGA every GEMM runs on Gemmini; on the host, on the CPU. */
+#include "console.h"
 #include "stories.h"
 #include "backend.h"
 #include "tok512.h"
 
-#include <stdint.h>
 #include <stdio.h>
 
 enum { NEW_TOKENS = 100, FPGA_HZ = 30000000 };
@@ -17,75 +17,12 @@ static unsigned long rdcycle(void) {
 }
 #endif
 
-#if defined(BAREMETAL) && defined(DEMO_UART)
-/* FireSim: the chip's SiFive UART (Chipyard's WithUART, 0x10020000), which the UART bridge shows
-   with little delay. An HTIF write (printstr) waits for the host, about 20M cycles per call. */
-#define UART_TXFIFO (*(volatile int32_t *)0x10020000) /* bit 31 reads 1 while the FIFO is full */
-#define UART_TXCTRL (*(volatile uint32_t *)0x10020008) /* bit 0 enables transmit */
-
-static void put(const char *s) {
-  UART_TXCTRL |= 1;
-  for (; *s; s++) {
-    if (*s == '\n') {
-      while (UART_TXFIFO < 0)
-        ;
-      UART_TXFIFO = '\r';
-    }
-    while (UART_TXFIFO < 0)
-      ;
-    UART_TXFIFO = *s;
-  }
-}
-
-/* Let the FIFO (8 characters) drain before the program exits. 20M cycles is generous. */
-static void drain(void) {
-  unsigned long t0 = rdcycle();
-  while (rdcycle() - t0 < 20000000ul)
-    ;
-}
-#elif defined(BAREMETAL)
-void printstr(const char *s); /* riscv-tests syscalls.c: an unbuffered write to the console */
-
-static void put(const char *s) { printstr(s); }
-static void drain(void) {}
-#else
-static void put(const char *s) {
-  fputs(s, stdout);
-  fflush(stdout);
-}
-static void drain(void) {}
-#endif
-
-enum { WRAP = 96 }; /* wrap the story before this column, at a space */
-
-static int prev = TOK_BOS, generated, column;
-
-/* Print one token's text. The first piece after BOS loses its leading space, as in decode().
-   A piece that starts a word and would cross WRAP starts a new line instead of its space. */
-static void put_token(int t) {
-  const char *p = tok_pieces + tok_offsets[t];
-  int len = 0;
-  while (p[len])
-    len++;
-  if (prev == TOK_BOS && *p == ' ') {
-    p++;
-    len--;
-  } else if (*p == ' ' && column + len > WRAP) {
-    put("\n");
-    p++;
-    len--;
-    column = 0;
-  }
-  put(p);
-  for (; *p; p++)
-    column = *p == '\n' ? 0 : column + 1;
-  prev = t;
-}
+static int generated;
 
 static int on_token(int t) {
   if (t == TOK_BOS || t == TOK_EOS) /* the model starts a new story: stop here */
     return 1;
-  put_token(t);
+  con_put_token(t);
   generated++;
   return 0;
 }
@@ -94,10 +31,10 @@ int main(void) {
   int tokens[STORIES_MAX_SEQ];
   int np;
   const int *prompt = stories_prompt(&np);
-
   char line[160];
+
   sprintf(line, "\nstories260K, every matmul on %s\n\n", backend_name());
-  put(line);
+  con_put(line);
   for (int i = 0; i < np; i++)
     tokens[i] = prompt[i];
 #ifdef BAREMETAL
@@ -105,10 +42,11 @@ int main(void) {
 #endif
   stories_set_on_token(on_token);
 
+  con_new_story();
   for (int i = 1; i < np; i++) /* token 0 is BOS */
-    put_token(prompt[i]);
-  int n = stories_generate(tokens, np, NEW_TOKENS);
-  put("\n\n");
+    con_put_token(prompt[i]);
+  stories_generate(tokens, np, NEW_TOKENS);
+  con_put("\n\n");
 
 #ifdef BAREMETAL
   unsigned long tot = 0;
@@ -121,8 +59,7 @@ int main(void) {
 #else
   sprintf(line, "%d tokens, %ld GEMMs\n", generated, stories_gemm_count());
 #endif
-  put(line);
-  drain();
-  (void)n;
+  con_put(line);
+  con_drain();
   return 0;
 }

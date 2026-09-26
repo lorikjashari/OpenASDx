@@ -24,11 +24,29 @@ STORIES = src/main_stories.c src/stories.c include/stories.h include/backend.h w
 llm-stories: $(STORIES) src/backend_cpu.c
 	$(CC) $(CFLAGS) -Iweights -o $@ src/main_stories.c src/stories.c src/backend_cpu.c $(LDFLAGS)
 
-llm-demo: $(STORIES) src/main_demo.c src/backend_cpu.c weights/tok512.h
-	$(CC) $(CFLAGS) -Iweights -o $@ src/main_demo.c src/stories.c src/backend_cpu.c $(LDFLAGS)
+CONSOLE = src/console.c src/tokenizer.c include/console.h include/tokenizer.h weights/tok512.h
+
+llm-demo: $(STORIES) src/main_demo.c src/backend_cpu.c $(CONSOLE)
+	$(CC) $(CFLAGS) -Iweights -o $@ src/main_demo.c src/stories.c src/backend_cpu.c src/console.c \
+		src/tokenizer.c $(LDFLAGS)
+
+# The interactive demo on the Mac: type the start of a story, with the CPU backend.
+llm-chat: $(STORIES) src/main_chat.c src/backend_cpu.c $(CONSOLE)
+	$(CC) $(CFLAGS) -Iweights -o $@ src/main_chat.c src/stories.c src/backend_cpu.c src/console.c \
+		src/tokenizer.c $(LDFLAGS)
+
+chat: llm-chat
+	./llm-chat
 
 demo: llm-demo
 	./llm-demo
+
+llm-encode: src/main_encode.c src/tokenizer.c include/tokenizer.h weights/tok512.h
+	$(CC) $(CFLAGS) -Iweights -o $@ src/main_encode.c src/tokenizer.c $(LDFLAGS)
+
+# The C encoder against Tokenizer.encode() in tools/stories_int8.py.
+test-encoder: llm-encode $(PYTHON)
+	cd tools && $(abspath $(PYTHON)) check_encoder.py
 
 # Bare-metal RISC-V build for Spike and FireSim (#33), inside the Chipyard environment
 # (docker/dev.sh shell, then source /work/vol/chipyard/env.sh). Every GEMM runs on Gemmini and on the
@@ -43,7 +61,8 @@ RV_CFLAGS = -DBAREMETAL=1 -DPREALLOCATE=1 -mcmodel=medany -std=gnu11 -O2 -fno-co
 RV_LDFLAGS = -nostdlib -nostartfiles -static -T $(RV_COMMON)/test.ld
 RV_BUILD = build-riscv
 
-$(RV_BUILD)/%.o: src/%.c include/backend.h include/stories.h weights/stories260k.h weights/tok512.h
+$(RV_BUILD)/%.o: src/%.c include/backend.h include/stories.h include/console.h include/tokenizer.h \
+		weights/stories260k.h weights/tok512.h
 	@mkdir -p $(RV_BUILD)
 	$(RV_CC) $(RV_CFLAGS) -c -o $@ $<
 
@@ -71,18 +90,21 @@ llm-stories-cpu-baremetal: $(RV_BUILD)/main_stories.o $(RV_BUILD)/stories.o \
 		$(RV_BUILD)/backend_cpu.o $(RV_BUILD)/baremetal.o
 	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
 
-# The demo (#7): the story printed word by word as it is generated, with every GEMM on Gemmini.
-llm-demo-baremetal: $(RV_BUILD)/main_demo.o $(RV_BUILD)/stories.o $(RV_BUILD)/backend_gemmini.o \
-		$(RV_BUILD)/baremetal.o
+# The demos on bare metal (#7, #52). The Spike build prints through HTIF; the FireSim builds use
+# the chip's UART (CONSOLE_UART), which shows each word at once and takes typed input.
+$(RV_BUILD)/console_uart.o: src/console.c include/console.h include/tokenizer.h weights/tok512.h
+	@mkdir -p $(RV_BUILD)
+	$(RV_CC) $(RV_CFLAGS) -DCONSOLE_UART -c -o $@ $<
+
+RV_DEMO = $(RV_BUILD)/stories.o $(RV_BUILD)/backend_gemmini.o $(RV_BUILD)/tokenizer.o $(RV_BUILD)/baremetal.o
+
+llm-demo-baremetal: $(RV_BUILD)/main_demo.o $(RV_BUILD)/console.o $(RV_DEMO)
 	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
 
-# The same demo for FireSim: it prints through the chip's UART, which shows each word at once.
-$(RV_BUILD)/main_demo_uart.o: src/main_demo.c include/backend.h include/stories.h weights/tok512.h
-	@mkdir -p $(RV_BUILD)
-	$(RV_CC) $(RV_CFLAGS) -DDEMO_UART -c -o $@ $<
+llm-demo-firesim: $(RV_BUILD)/main_demo.o $(RV_BUILD)/console_uart.o $(RV_DEMO)
+	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
 
-llm-demo-firesim: $(RV_BUILD)/main_demo_uart.o $(RV_BUILD)/stories.o $(RV_BUILD)/backend_gemmini.o \
-		$(RV_BUILD)/baremetal.o
+llm-chat-firesim: $(RV_BUILD)/main_chat.o $(RV_BUILD)/console_uart.o $(RV_DEMO)
 	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
 
 test-spike: llm-stories-baremetal
@@ -109,5 +131,5 @@ tools/.venv/bin/python:
 
 clean:
 	rm -f llm-cpu llm-f2 llm-f2-sim llm-stories llm-stories-baremetal llm-stories-gemmini-baremetal \
-		llm-stories-cpu-baremetal llm-demo llm-demo-baremetal llm-demo-firesim
+		llm-stories-cpu-baremetal llm-demo llm-demo-baremetal llm-demo-firesim llm-encode llm-chat llm-chat-firesim
 	rm -rf $(RV_BUILD)

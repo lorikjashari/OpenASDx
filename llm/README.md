@@ -71,9 +71,12 @@ make test-f2    # same model, GEMM goes through the F2 register protocol in soft
 make demo                       # on the Mac: the story, word by word, with the CPU backend
 make llm-demo-baremetal         # for Spike (prints through HTIF)
 make llm-demo-firesim           # for the FPGA (prints through the chip's UART; it doesn't run on Spike)
+make chat                       # on the Mac: the interactive demo, type the start of a story
+make llm-chat-firesim           # the interactive demo for the FPGA (aws/manager/fpga-chat.sh)
+make test-encoder               # the C tokenizer against the Python one
 ```
 
-`src/main_demo.c` continues the prompt for up to 100 tokens, and prints each word as soon as it is chosen, then the cycles per token. The words come from `weights/tok512.h`, the tokenizer's 512 pieces, written by `tools/export_vocab.py`. The recording of the FPGA run is in `img/demo/`.
+`src/main_demo.c` continues the prompt for up to 100 tokens, and prints each word as soon as it is chosen, then the cycles per token. `src/main_chat.c` reads a prompt, tokenizes it with `src/tokenizer.c` (llama2.c's BPE, the same tokens as `Tokenizer.encode()`), and continues it the same way. Both demos share `src/console.c`: stdin and stdout on the Mac, HTIF on Spike, and the chip's UART on the FPGA. The pieces and merge scores are in `weights/tok512.h`, written by `tools/export_vocab.py`. The recording of the FPGA run is in `img/demo/`.
 
 ## FPGA path: FireSim with Gemmini on F2
 

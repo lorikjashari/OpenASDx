@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Write llm/weights/tok512.h: stories260K's tokenizer pieces, so the C demo can print text.
+"""Write llm/weights/tok512.h: stories260K's tokenizer pieces and merge scores, so the C demos can
+print text and encode a typed prompt.
 
     tools/.venv/bin/python tools/export_vocab.py
 
@@ -45,7 +46,13 @@ def main():
     lines.append("};\n\nstatic const char tok_pieces[] =\n")
     for p in pieces:
         lines.append(f"  {c_string(p)} \"\\000\"\n")
-    lines.append(";\n\n#endif\n")
+    lines.append(";\n\n")
+    # The encoder needs each piece's own spelling too (byte tokens as "<0xXX>" never merge) and
+    # its score: BPE merges the adjacent pair whose joined piece has the highest score.
+    lines.append("/* BPE merge score of each piece, from tok512.bin. */\nstatic const float tok_scores[TOK_VOCAB] = {\n")
+    for i in range(0, len(tok.scores), 8):
+        lines.append("  " + ", ".join(f"{x!r}f" for x in tok.scores[i:i + 8]) + ",\n")
+    lines.append("};\n\n#endif\n")
     OUT.write_text("".join(lines))
     # Check: decoding the pieces back gives the tokenizer's own text.
     sample = tok.encode("Once upon a time, there was a little girl named Lily.")
