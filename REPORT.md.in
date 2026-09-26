@@ -51,6 +51,16 @@ flowchart LR
 
 Everything is reproducible from the repo: `docker/`, `llm/` and `aws/`.
 
+### Terms
+
+- **Spike** is the reference RISC-V instruction-set simulator. It runs a RISC-V program on an ordinary computer (here, the Mac or the manager) and executes one instruction after another, exactly as the ISA specifies. The Gemmini extension (`libgemmini`) adds Gemmini's custom instructions. Spike is fast (a whole model run takes under 2 s) and checks that the program computes the right results. But it models no hardware: it has no pipeline, no memory latency, and no systolic array doing work cycle by cycle, so the "cycles" it reports are only instruction counts. We used it to check the software before the FPGA. Every cycle count in this report comes from the FPGA.
+- **FireSim** takes the RTL (the actual hardware design) of a whole chip and runs it on an FPGA, cycle by cycle, at tens of MHz. A program on it behaves exactly as it would on the real chip, so cycle counts are real hardware numbers. The FPGA's 30 MHz only sets how fast the simulation runs, not the cycle counts.
+- **Gemmini** is the matrix-multiplication accelerator: a 16×16 grid of int8 multiply-accumulate units (a systolic array) with its own on-chip memory. It is attached to the core as a RoCC coprocessor, and the core drives it with custom RISC-V instructions.
+- **Rocket** is the RISC-V CPU core that runs the program. It does everything that isn't a matrix multiplication.
+- **GEMM** is a general matrix multiplication, C = A × B. In this model, every linear layer and both attention products are GEMMs.
+- **ELF** is the program file: the compiled RISC-V binary with its code, the frozen weights and the space reserved for buffers. Spike and FireSim both load the same ELF.
+- **Lean config** is the Gemmini configuration in FireSim's prebuilt F2 image. Its limits are listed under "The platform".
+
 ## Results
 
 ### Correctness
