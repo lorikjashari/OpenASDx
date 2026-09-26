@@ -55,6 +55,16 @@ llm-stories-baremetal: $(RV_BUILD)/main_stories.o $(RV_BUILD)/stories.o $(RV_BUI
 		$(RV_BUILD)/backend_cpu_ref.o $(RV_BUILD)/backend_gemmini_dut.o $(RV_BUILD)/baremetal.o
 	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
 
+# The same model with one backend each, for cycle counts on FireSim (#12): Gemmini alone, and the
+# Rocket core alone as the baseline. Neither compares GEMM outputs; llm-stories-baremetal does.
+llm-stories-gemmini-baremetal: $(RV_BUILD)/main_stories.o $(RV_BUILD)/stories.o \
+		$(RV_BUILD)/backend_gemmini.o $(RV_BUILD)/baremetal.o
+	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
+
+llm-stories-cpu-baremetal: $(RV_BUILD)/main_stories.o $(RV_BUILD)/stories.o \
+		$(RV_BUILD)/backend_cpu.o $(RV_BUILD)/baremetal.o
+	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
+
 test-spike: llm-stories-baremetal
 	spike --extension=gemmini ./llm-stories-baremetal
 
@@ -78,5 +88,6 @@ tools/.venv/bin/python:
 	tools/.venv/bin/pip install -q numpy
 
 clean:
-	rm -f llm-cpu llm-f2 llm-f2-sim llm-stories llm-stories-baremetal
+	rm -f llm-cpu llm-f2 llm-f2-sim llm-stories llm-stories-baremetal llm-stories-gemmini-baremetal \
+		llm-stories-cpu-baremetal
 	rm -rf $(RV_BUILD)

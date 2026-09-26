@@ -9,6 +9,15 @@ enum { PREFIX = 16 };
 
 static int g_fail;
 
+#ifdef BAREMETAL
+/* The core's cycle counter. On FireSim these are target cycles of the RTL, whatever the FPGA clock. */
+static unsigned long rdcycle(void) {
+  unsigned long c;
+  __asm__ volatile("rdcycle %0" : "=r"(c));
+  return c;
+}
+#endif
+
 static void expect(int cond, const char *msg) {
   printf("  %s %s\n", cond ? "ok  " : "FAIL", msg);
   if (!cond)
@@ -48,6 +57,9 @@ int main(void) {
 
   for (int i = 0; i < np; i++)
     tokens[i] = prompt[i];
+#ifdef BAREMETAL
+  stories_set_clock(rdcycle);
+#endif
   int n = stories_generate(tokens, np, ne);
   long gemms = stories_gemm_count();
 
@@ -62,9 +74,31 @@ int main(void) {
   expect(same >= PREFIX, "the first " PREFIX_STR " generated tokens match the Python reference");
 
   long mismatches = backend_mismatches();
-  expect(mismatches == 0, "no GEMM output differs between backends");
+  if (mismatches < 0)
+    printf("  --   GEMM outputs not compared: this build has one backend\n");
+  else
+    expect(mismatches == 0, "no GEMM output differs between backends");
 
   printf("\n%ld GEMMs on the backend for %d positions\n", gemms, n - 1);
+#ifdef BAREMETAL
+  /* Position np-1 reads the last prompt token and produces the first new one; the positions
+     before it only fill the KV cache. */
+  unsigned long tot = 0, gem = 0, lo = ~0ul, hi = 0;
+  for (int pos = np - 1; pos < n - 1; pos++) {
+    unsigned long c = stories_position_cycles(pos);
+    tot += c;
+    gem += stories_position_gemm_cycles(pos);
+    lo = c < lo ? c : lo;
+    hi = c > hi ? c : hi;
+  }
+  int gen = n - np;
+  printf("cycles per generated token (%d tokens): mean %lu, min %lu, max %lu; in GEMM calls %lu%%\n",
+         gen, tot / gen, lo, hi, gen && tot ? gem * 100 / tot : 0);
+  printf("cycles per position:");
+  for (int pos = 0; pos < n - 1; pos++)
+    printf(" %lu", stories_position_cycles(pos));
+  printf("\n");
+#endif
   printf("tokens:");
   for (int i = 0; i < n; i++)
     printf(" %d", tokens[i]);

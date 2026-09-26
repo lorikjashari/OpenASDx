@@ -20,6 +20,21 @@ static float kc[ST_LAYERS][ST_MAX_SEQ][KV_DIM];
 static float vc[ST_LAYERS][ST_MAX_SEQ][KV_DIM];
 static long gemm_count;
 
+/* Optional cycle counter (stories_set_clock). Per position: all cycles, and those inside GEMMs. */
+static unsigned long (*clock_fn)(void);
+static unsigned long pos_cycles[ST_MAX_SEQ], pos_gemm_cycles[ST_MAX_SEQ];
+static unsigned long gemm_cycles;
+
+/* Every matmul goes through here: count it, and time it if a clock is set. */
+static void gemm(const int8_t *A, const int8_t *B, float *C, int M, int N, int K, int trans_b,
+                 float acc_scale, float out_scale) {
+  gemm_count++;
+  unsigned long t0 = clock_fn ? clock_fn() : 0;
+  backend_gemm_i8_o8(A, B, C, M, N, K, trans_b, acc_scale, out_scale);
+  if (clock_fn)
+    gemm_cycles += clock_fn() - t0;
+}
+
 /* Symmetric int8 with one scale for the whole vector, as q8() in stories_int8.py. */
 static float quantize(const float *x, int n, int8_t *q) {
   float amax = 0.f;
@@ -41,8 +56,7 @@ static void linear(const float *x, int K, const int8_t *w, float w_scale, int N,
                    float *y) {
   int8_t xq[MAX_K];
   float a_scale = quantize(x, K, xq);
-  gemm_count++;
-  backend_gemm_i8_o8(xq, w, y, 1, N, K, 0, a_scale * w_scale / out_scale, out_scale);
+  gemm(xq, w, y, 1, N, K, 0, a_scale * w_scale / out_scale, out_scale);
 }
 
 static void rmsnorm(float *out, const float *x, const float *w) {
@@ -98,18 +112,15 @@ static void attention(int l, int pos, const float *q, float *ctx) {
 
     float qs = quantize(q + h * ST_HEAD_DIM, ST_HEAD_DIM, q8);
     float ks = quantize(kpack, len * ST_HEAD_DIM, k8);
-    gemm_count++;
-    backend_gemm_i8_o8(q8, k8, score, 1, len, ST_HEAD_DIM, 1, qs * ks / st_qk_out_scale[l],
-                       st_qk_out_scale[l]);
+    gemm(q8, k8, score, 1, len, ST_HEAD_DIM, 1, qs * ks / st_qk_out_scale[l], st_qk_out_scale[l]);
     for (int t = 0; t < len; t++)
       score[t] /= sqrtf((float)ST_HEAD_DIM);
     softmax(score, len);
 
     float ps = quantize(score, len, p8);
     float vs = quantize(vpack, len * ST_HEAD_DIM, v8);
-    gemm_count++;
-    backend_gemm_i8_o8(p8, v8, ctx + h * ST_HEAD_DIM, 1, ST_HEAD_DIM, len, 0,
-                       ps * vs / st_av_out_scale[l], st_av_out_scale[l]);
+    gemm(p8, v8, ctx + h * ST_HEAD_DIM, 1, ST_HEAD_DIM, len, 0, ps * vs / st_av_out_scale[l],
+         st_av_out_scale[l]);
   }
 }
 
@@ -151,6 +162,8 @@ int stories_generate(int *tokens, int prompt_len, int max_new) {
   int n = prompt_len;
   gemm_count = 0;
   for (int pos = 0; pos < n && n < prompt_len + max_new && n < ST_MAX_SEQ; pos++) {
+    unsigned long t0 = clock_fn ? clock_fn() : 0;
+    gemm_cycles = 0;
     forward(tokens[pos], pos, logits);
     if (pos == n - 1) {
       int best = 0;
@@ -158,6 +171,10 @@ int stories_generate(int *tokens, int prompt_len, int max_new) {
         if (logits[i] > logits[best])
           best = i;
       tokens[n++] = best;
+    }
+    if (clock_fn) {
+      pos_cycles[pos] = clock_fn() - t0;
+      pos_gemm_cycles[pos] = gemm_cycles;
     }
   }
   return n;
@@ -174,3 +191,7 @@ const int *stories_expected(int *n) {
 }
 
 long stories_gemm_count(void) { return gemm_count; }
+
+void stories_set_clock(unsigned long (*clock)(void)) { clock_fn = clock; }
+unsigned long stories_position_cycles(int pos) { return pos_cycles[pos]; }
+unsigned long stories_position_gemm_cycles(int pos) { return pos_gemm_cycles[pos]; }

@@ -19,4 +19,11 @@ const int *stories_expected(int *n);
 /* Number of GEMM calls since the last stories_generate() started. */
 long stories_gemm_count(void);
 
+/* Optional cycle counter, e.g. rdcycle on bare metal. When set, stories_generate() records, for
+   each position, the cycles of the whole forward pass (and the argmax) and the part inside GEMM
+   calls. Positions before the last prompt token produce no new token. */
+void stories_set_clock(unsigned long (*clock)(void));
+unsigned long stories_position_cycles(int pos);
+unsigned long stories_position_gemm_cycles(int pos);
+
 #endif

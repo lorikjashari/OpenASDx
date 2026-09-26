@@ -3,4 +3,6 @@ weights/stories260K/
 __pycache__/
 llm-stories
 llm-stories-baremetal
+llm-stories-gemmini-baremetal
+llm-stories-cpu-baremetal
 build-riscv/
