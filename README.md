@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="420" alt="OpenASDx" src="./img/openasdxshadow.png">
+  <img width="1000" alt="OpenASDx" src="./img/openasdx.png">
 </p>
 
 OpenASDx
