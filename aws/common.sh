@@ -5,7 +5,7 @@ export AWS_REGION=eu-central-1
 AZ=eu-central-1b
 # The account's default VPC in eu-central-1. The IAM policy lets us launch only there.
 VPC=vpc-43d0e828
-# FireSim's Ubuntu 24.04 F2 AMI (FireSim 1.19.2) in eu-central-1, for the manager and the F2 alike.
+# AWS's FPGA Developer AMI (Ubuntu) 1.19.2 in eu-central-1, which FireSim uses, for the manager and the F2 alike.
 AMI=ami-092ebd0b9baef5842
 # The IAM policy allows only launches with this tag on the instance, volume and network interface.
 TAG_KEY=Project

@@ -35,7 +35,7 @@ flowchart LR
   end
 ```
 
-1. **The model.** We trained nothing: we took stories260K, a pretrained 260K-parameter Llama-style model trained on TinyStories (karpathy/tinyllamas, MIT). Its shape: dim {{dim}}, {{layers}} layers, {{heads}} query heads and {{kv_heads}} KV heads, vocabulary {{vocab}}.
+1. **The model.** We trained nothing: we took stories260K, a pretrained Llama-style model with {{params}} parameters trained on TinyStories (karpathy/tinyllamas, MIT). Its shape: dim {{dim}}, {{layers}} layers, {{heads}} query heads and {{kv_heads}} KV heads, vocabulary {{vocab}}.
 2. **Quantization to Gemmini's contract.** The prebuilt FPGA image can't read int32 results out of the accelerator, so every GEMM has to end in int8: `q = clamp(round(acc × scale), −128, 127)`. We calibrated one static output scale per GEMM type, {{scales}} in total, from a float pass over {{calib_prompts}} prompts. Then we froze the model as a C header (`llm/weights/stories260k.h`).
 3. **A C implementation** in which every matmul goes through one function, `backend_gemm_i8_o8`. Its backends:
    - the CPU;
@@ -148,9 +148,9 @@ Details and every console log: `llm/fpga/f2/FIRESIM.md` and `llm/fpga/f2/results
 | image | FireSim `firesim_gemmini_rocket_singlecore_no_nic`, `agfi-0f567000cb21cb06d`, public and prebuilt |
 | chip | `FireSimLeanGemminiRocketConfig`: one Rocket core and Gemmini, at 30 MHz (measured: {{mhz}} MHz) |
 | Gemmini | 16×16 int8 array, 256 KB scratchpad, 64 KB accumulator, weight-stationary dataflow, int8 read-out |
-| software | Chipyard 1.14.0 (`0acc1e1`), FireSim 1.19.2 AMI, riscv64-unknown-elf-gcc 13.2 |
+| software | Chipyard 1.14.0 (`0acc1e1`), AWS FPGA Developer AMI (Ubuntu) 1.19.2, riscv64-unknown-elf-gcc 13.2.0 |
 | manager | c5.4xlarge (no FPGA), which builds and drives the runs |
-| wall clock | one model run takes about {{wall}} s on the FPGA, and about 1.5 min with setup and flashing. Spike takes about 1 s |
+| wall clock | one model run takes about {{wall}} s on the FPGA, and {{run_s}} s with setup and flashing. Spike takes 1.3 s (Gemmini only) to 1.8 s (checked) |
 
 We chose the prebuilt image over building our own bitstream, which takes several hours (#34). The price is the Lean config's limits, and we designed the int8-out contract around them.
 
@@ -170,7 +170,7 @@ We chose the prebuilt image over building our own bitstream, which takes several
    - FireSim set up with the F2 as an externally provisioned run host;
    - the model on the FPGA, bit-exact;
    - cycles per token with and without Gemmini;
-   - 20 of Gemmini's tests.
+   - {{n_tests}} of Gemmini's tests.
 
 ## Conclusions
 
@@ -184,7 +184,7 @@ We chose the prebuilt image over building our own bitstream, which takes several
 In order of expected gain:
 
 1. **Keep the KV cache in int8.** The core then stops re-quantizing the whole cache at every position. This should remove most of the {{g_rest_m}} cycles per token spent outside the GEMMs.
-2. **Batch sequences** (M up to 16) to fill the array's rows, or fuse the three GEMMs that share an input (Q, K and V; W1 and W3).
+2. **Batch sequences** (M up to 16) to fill the array's rows, or fuse the GEMMs that share an input: Q, K and V into one, and W1 and W3 into another.
 3. **Keep the weights on chip.** Pin the most-used layers in the scratchpad, instead of moving them in on every call.
 4. **A bigger model** (#21) and the full Gemmini config (#10: int32 read-out, 110 MHz), for numbers closer to a real workload.
 5. **The rest of Gemmini's tests** on the FPGA (#11), and a cycle-accurate RTL run in Verilator (#25).

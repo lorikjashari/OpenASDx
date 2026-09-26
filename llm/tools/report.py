@@ -122,7 +122,9 @@ def quality():
         nll = -np.mean([logp[i, ev[i + 1]] for i in range(len(ev) - 1)])
         out[f"ppl_{mode}"] = float(np.exp(nll))
         out[f"top1_{mode}"] = float(np.mean(lg.argmax(axis=1)[:-1] == ref.argmax(axis=1)[:-1]) * 100)
-    return out, tok
+    # Each array once: the classifier is the embedding table itself (a shared checkpoint).
+    arrays = {id(a): a.size for a in vars(m).values() if isinstance(a, np.ndarray)}
+    return out, tok, sum(arrays.values())
 
 
 # ---------------------------------------------------------------- values
@@ -147,13 +149,18 @@ def values():
     fixed = layers * proj + dim * vocab
     attn_per_pos = layers * heads * head_dim * 2
     macs = np.mean([fixed + attn_per_pos * (p + 1) for p in gen_pos])
+    # Parameters: the embedding table (shared with the classifier), the GEMM weights, the norms.
+    params = vocab * dim + layers * (proj + 2 * dim) + dim
     gemms_per_token = layers * (7 + 2 * heads) + 1
 
     g_gemm, c_gemm = g["mean"] * g["gemm_pct"] / 100, c["mean"] * c["gemm_pct"] / 100
     hz = g["mhz"] * 1e6
     slope = lambda r: (r["positions"][-1] - r["positions"][prompt - 1]) / (len(r["positions"]) - prompt)
 
-    q, tok = quality()
+    q, tok, ckpt_params = quality()
+    assert params == ckpt_params, f"parameters: {params} from the header, {ckpt_params} in the checkpoint"
+    run_s = next(int(l.split()[1].rstrip("s")) for l in read("sweep-summary.txt").splitlines()
+                 if l.startswith("llm-stories-gemmini-baremetal"))
     text = tok.decode(g["tokens"][1:])
     prompt_text = tok.decode(g["tokens"][1:prompt])
 
@@ -193,7 +200,7 @@ def values():
     f = lambda x: f"{x:,.0f}"
     M = lambda x: f"{x / 1e6:.2f}M"
     v = {
-        "prompt": prompt_text, "text": text,
+        "prompt": prompt_text, "text": text, "params": f(params), "run_s": run_s,
         "layers": layers, "dim": dim, "hidden": hidden, "heads": heads, "kv_heads": kv_heads,
         "vocab": vocab, "max_seq": max_seq,
         "gemms": f(chk["gemms"]), "npos": chk["npos"], "ngen": ngen, "gemms_per_token": gemms_per_token,
