@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Create the project security group if it is missing, and let the caller's public IP in on SSH
-# (ports 22 and 443). Members of the group can also reach each other on 22 (manager to F2).
-# Prints the group id. Run it again from a new network to add that IP too.
+# Create the project security group if it is missing, and let an IP in on SSH (ports 22 and 443):
+# the caller's public IP, or the one given, e.g. a colleague's.
+# Members of the group can also reach each other on 22 (manager to F2). Prints the group id.
+# Usage: aws/security-group.sh [IP]
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 source "$here/common.sh"
@@ -19,7 +20,7 @@ if [[ "$sg" == None ]]; then
   echo "created security group $SG_NAME ($sg)" >&2
 fi
 
-ip=$(curl -fsS https://checkip.amazonaws.com)
+ip=${1:-$(curl -fsS https://checkip.amazonaws.com)}
 for port in 22 443; do
   out=$(aws ec2 authorize-security-group-ingress --group-id "$sg" --output text 2>&1 \
     --ip-permissions "IpProtocol=tcp,FromPort=$port,ToPort=$port,IpRanges=[{CidrIp=$ip/32,Description=ssh}]") ||

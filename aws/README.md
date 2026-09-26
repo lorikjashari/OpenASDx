@@ -7,11 +7,7 @@ There are two machines:
 - **The manager** is a c5.4xlarge with no FPGA. It holds Chipyard and FireSim, builds the software, and drives the F2 over SSH.
 - **The run host** is an f2.6xlarge with the FPGA. It loads the prebuilt Gemmini image and runs the binaries. We launch it ourselves (#11), because FireSim can't launch it under our IAM policy.
 
-Both cost money while they run. Stop them when you're done:
-
-```
-aws ec2 stop-instances --instance-ids <id>
-```
+Both cost money while they run, the F2 most of all. Stop them when you're done (see "Daily use").
 
 ## The AWS account
 
@@ -65,6 +61,57 @@ aws configure
 
 Answer with your key ID, your secret, `eu-central-1` and `json`. From then on, start each session on the manager with `source ~/firesim-env.sh`.
 
+## Launch the F2 and point FireSim at it
+
+```
+aws/launch-run-host.sh
+```
+
+It launches an f2.6xlarge named `ogsa-firesim-f2`, and prints its private IP. Then, on the manager:
+
+```
+scp aws/manager/firesim-config.sh ogsa-firesim-manager:~/
+ssh ogsa-firesim-manager
+source ~/firesim-env.sh
+firesim managerinit --platform f2
+bash ~/firesim-config.sh <F2 private IP>
+cp ~/.ssh/<the key>.pem ~/firesim.pem && chmod 600 ~/firesim.pem
+firesim infrasetup
+```
+
+Notes:
+- `managerinit` writes the config files, then fails with `IndexError` while looking for a "firesim" VPC. That part is only for FireSim-launched run farms, so ignore it.
+- `firesim-config.sh` lists the F2 as an externally provisioned host and selects the public Gemmini image `firesim_gemmini_rocket_singlecore_no_nic` (`agfi-0f567000cb21cb06d`).
+- FireSim reaches the F2 with `~/firesim.pem`, so copy the key there. The `ogsa-firesim` security group lets its members reach each other on port 22.
+- `infrasetup` builds the host driver on the manager, then installs the FPGA tools on the F2 and flashes the image.
+
+## Daily use
+
+```
+aws/status.sh                     # our instances, their state and IPs
+aws/down.sh                       # stop all of them; or name one: aws/down.sh ogsa-firesim-f2
+aws/up.sh                         # start them again and print fresh ~/.ssh/config entries
+aws/ssh-config.sh                 # print those entries for whatever is running
+```
+
+- A stopped instance keeps its disk and its private IP, so FireSim's config stays valid. It costs only the disk.
+- The public IP changes on every start, so update `~/.ssh/config` from `aws/up.sh`.
+- These scripts only touch instances tagged for the project and named `ogsa-firesim-*`. Other instances in the account carry the tag too.
+
+## For a colleague
+
+1. Get an AWS CLI profile for the project, and set `AWS_PROFILE`.
+2. Run `aws/security-group.sh` from your network. Someone with access can also run `aws/security-group.sh <your IP>` for you.
+3. Get `ogsa-firesim.pem` from whoever holds it, and save it as `~/.ssh/ogsa-firesim.pem` with mode 600.
+4. Run `aws/ssh-config.sh >> ~/.ssh/config`.
+
 ## Status
 
-We set up the current manager step by step, with these fixes applied one at a time. `setup.sh` puts the same steps into a single script, but nobody has run it end to end on a fresh instance yet. The launch and user-data scripts match the commands that started the current manager.
+- Tested for real:
+  - `launch-run-host.sh` (it started the current F2);
+  - `security-group.sh`, `status.sh` and `ssh-config.sh`;
+  - `firesim-config.sh`, on a copy of the manager's config.
+- Not run yet:
+  - `launch-manager.sh`, which uses the same launch function as the F2 script. The current manager was started with the equivalent commands by hand.
+  - `up.sh` and `down.sh`.
+  - `setup.sh`, which combines the steps that worked one at a time on the current manager. Nobody has run it end to end on a fresh instance.
