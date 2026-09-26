@@ -1,0 +1,201 @@
+# An LLM on an open-source accelerator, on a real FPGA
+
+*OpenASDx, hackathon "Towards an Open-Source GPU for Science", 2026-09-26*
+
+## Summary
+
+We ran a small language model on a real FPGA, with every matrix multiplication (GEMM) of the model executed by **Gemmini**. Gemmini is the open-source systolic-array accelerator from UC Berkeley, and it is attached to an open-source RISC-V core (Rocket). The chip runs on an **AWS F2 FPGA** through FireSim, in Frankfurt.
+
+- **It works, and it's exact.** The model is stories260K. We ran all {{gemms}} GEMMs of a generation on Gemmini and on the CPU side by side, and they are **bit-identical**. The tokens are the same on the FPGA, on the Spike simulator and on a Mac.
+- **It's faster.** A token takes **{{g_cycles_m}} cycles with Gemmini, against {{c_cycles_m}} on the RISC-V core alone**. That's {{speedup}}× end to end, and about {{gemm_speedup}}× on the GEMMs themselves. At the FPGA's {{mhz}} MHz, that's **{{g_tps}} tokens/s against {{c_tps}}**.
+- **The hardware is sound.** Every Gemmini bare-metal test within the prebuilt image's features passes on the FPGA ({{n_pass}} of {{n_tests}}), and a large matmul reaches **{{util_perf}}% of peak**.
+- **The bottleneck is now software.** With Gemmini doing the GEMMs, {{g_rest_pct}}% of a token's cycles go to work on the core, and the GEMMs use only {{util_llm}}% of Gemmini's peak, because decoding multiplies one vector at a time. Both problems have known fixes, listed under "What's next".
+
+Prompt: **"{{prompt}}"**. What the model wrote on the FPGA:
+
+> {{text}}
+
+## What we built
+
+```mermaid
+flowchart LR
+  subgraph Mac["Mac (Docker)"]
+    PY["stories260K checkpoint<br/>→ int8, static scales<br/>(Python, numpy)"] --> H["weights/stories260k.h<br/>(frozen model)"]
+    H --> C["C model<br/>{{gemms_per_token}} GEMMs per token"]
+  end
+  C --> SP["Spike<br/>functional ISA simulator"]
+  C --> FS
+  subgraph AWS["AWS eu-central-1"]
+    M["FireSim manager<br/>c5.4xlarge"] -->|"workload, SSH"| FS
+    subgraph FS["F2 FPGA: the whole chip"]
+      R["Rocket RISC-V core<br/>softmax, norms, sampling"] <-->|RoCC| G["Gemmini 16×16<br/>all GEMMs, int8"]
+      R --- D[("DRAM<br/>weights, KV cache")]
+      G --- D
+    end
+  end
+```
+
+1. **The model.** We trained nothing: we took stories260K, a pretrained 260K-parameter Llama-style model trained on TinyStories (karpathy/tinyllamas, MIT). Its shape: dim {{dim}}, {{layers}} layers, {{heads}} query heads and {{kv_heads}} KV heads, vocabulary {{vocab}}.
+2. **Quantization to Gemmini's contract.** The prebuilt FPGA image can't read int32 results out of the accelerator, so every GEMM has to end in int8: `q = clamp(round(acc × scale), −128, 127)`. We calibrated one static output scale per GEMM type, {{scales}} in total, from a float pass over {{calib_prompts}} prompts. Then we froze the model as a C header (`llm/weights/stories260k.h`).
+3. **A C implementation** in which every matmul goes through one function, `backend_gemm_i8_o8`. Its backends:
+   - the CPU;
+   - Gemmini;
+   - a checked backend, which runs both and compares every output element.
+4. **Spike first.** The bare-metal RISC-V binary ran on Spike with the Gemmini extension. The GEMMs were bit-identical and the tokens matched.
+5. **The same binary on the FPGA.** On AWS we set up:
+   - a FireSim manager;
+   - an F2 loaded with FireSim's public Gemmini image;
+   - a one-command runner.
+
+   Then we ran the model and Gemmini's own tests.
+
+Everything is reproducible from the repo: `docker/`, `llm/` and `aws/`.
+
+## Results
+
+### Correctness
+
+| check | result |
+|---|---|
+| GEMM outputs, Gemmini against the CPU ({{gemms}} GEMMs, {{npos}} positions) | **bit-identical** on the FPGA and on Spike |
+| tokens: FPGA, Spike and Mac | identical |
+| tokens against the float64 Python reference | first 16 of {{expected}} identical ({{same}} of {{expected}} overall)¹ |
+| quality of the int8 model, perplexity on a held-out text of {{eval_tokens}} tokens | float {{ppl_float}} → int8 with int32 read-out {{ppl_int32}} → Lean int8 {{ppl_lean}} |
+| top-1 agreement with the float model | {{top1_int32}}% with int32 read-out, {{top1_lean}}% with Lean int8 |
+
+¹ After {{same}} matching tokens, the top two logits are within one int8 output step of each other. float32 in C and float64 in Python round that near-tie differently, and the text continues differently from there, still fluently. Details are in `llm/weights/TASK.md`.
+
+### Speed
+
+![Cycles per position](img/report/cycles-per-position.png)
+
+Every position costs more than the one before it, about {{g_slope_k}} cycles more with Gemmini and {{c_slope_k}} more without. The attention reads the growing KV cache. The GEMMs over that cache grow by only {{attn_per_pos}} MACs per position, so the growth is almost all the core re-quantizing and repacking the cache at every step.
+
+![Where a token's cycles go](img/report/cycles-breakdown.png)
+
+| per generated token, mean over {{ngen}} tokens | Rocket core only | Rocket + Gemmini |
+|---|---:|---:|
+| cycles | {{c_cycles}} | **{{g_cycles}}** |
+| of which in GEMM calls | {{c_pct}}% (≈ {{c_gemm_m}}) | {{g_pct}}% (≈ {{g_gemm_m}}) |
+| **tokens/s at {{mhz}} MHz (measured)** | {{c_tps}} | **{{g_tps}}** |
+| tokens/s at {{proj_ghz}} GHz (same cycles, projection) | {{c_tps_proj}} | {{g_tps_proj}} |
+| speedup, end to end / GEMMs only | | **{{speedup}}× / ≈ {{gemm_speedup}}×** |
+
+![Tokens per second](img/report/tokens-per-second.png)
+
+The cycle counts come from the core's `rdcycle` counter. They are cycles of the actual RTL, so they don't depend on the FPGA's clock. The {{proj_ghz}} GHz column only rescales them to show what a clock typical of a real chip would give. It is not a measurement. The GEMM shares are the rounded percentages the binary prints, so the GEMM-only speedup is about {{gemm_speedup}}×.
+
+### Compute
+
+| | per generated token |
+|---|---:|
+| int8 MACs (all {{gemms_per_token}} GEMMs, mean over the {{ngen}} generated tokens) | **{{macs}}** |
+| of which the fixed projections and the LM head | {{fixed_macs}} |
+| of which attention over the cache | {{attn_per_pos}} × (position + 1) |
+| operations, counting a MAC as 2 | {{mops}} MOP (int8) |
+
+| throughput | Rocket core only | Rocket + Gemmini |
+|---|---:|---:|
+| MACs per cycle inside the GEMMs | {{c_mac_cycle}} | {{g_mac_cycle}} |
+| end to end at {{mhz}} MHz | {{c_mmacs}} MMAC/s | {{g_mmacs}} MMAC/s |
+
+The peak of Gemmini's Lean 16×16 array is 256 MACs per cycle, which is {{peak_gmacs}} GMAC/s at {{mhz}} MHz.
+
+![Gemmini utilization](img/report/gemmini-utilization.png)
+
+**Gemmini's numbers against the model's.** A large matmul (`tiled_matmul_ws_perf`, {{perf_dims}}) runs at **{{util_perf}}% of peak** on the FPGA. The model's GEMMs run at **{{util_llm}}%**. In decode, each GEMM multiplies a single row (M = 1) by a small matrix, so 15 of the array's 16 rows sit idle. Each of the {{gemms_per_token}} calls per token also pays a fixed cost to configure the accelerator, move the weights in and wait for the result, about {{per_call}} cycles on average. That's what batching and keeping the weights on chip would fix.
+
+### Memory
+
+The whole program, with the model, the KV cache and the buffers, takes **{{elf_mb}} MB of the chip's DRAM**. The program is one ELF file, the compiled RISC-V binary that FireSim loads into the chip's memory and runs. Its size, section by section:
+
+| | bytes | notes |
+|---|---:|---|
+| int8 weights (all GEMMs) | {{weights}} | read once per token |
+| float embeddings and norms | {{floats}} | |
+| KV cache, allocated | {{kv_alloc}} | float, for the full context of {{max_seq}} tokens |
+| KV cache, used by the {{npos}}-position run | {{kv_used}} | |
+| Gemmini staging buffers | {{staging}} | padded A and B, the accumulator, the int8 path's A, B and C |
+| code | {{code}} | |
+| **total ELF image (`riscv64-unknown-elf-size`)** | **{{elf}}** | `.rodata` {{rodata}}, `.bss` {{bss}} |
+
+Gemmini has 320 KB of on-chip memory: a 256 KB scratchpad and a 64 KB accumulator. The int8 weights are {{weights_kb}} KB, just over the scratchpad, so every token streams them from DRAM again. At {{g_tps}} tokens/s, that's only about {{weight_mbs}} MB/s. The problem isn't bandwidth but the per-call overhead described above.
+
+We didn't measure the FPGA resources (LUTs, BRAM): the image is FireSim's prebuilt `agfi-0f567000cb21cb06d`, and we didn't synthesize it.
+
+### Gemmini's own tests on the FPGA
+
+We ran {{n_tests}} bare-metal tests: **{{n_pass}} pass, which is every test within the Lean image's features**. The other {{n_fail}} need features the image leaves out, and the model uses none of them:
+
+| needs | tests |
+|---|---|
+{{limit_rows}}
+
+| perf test | Gemmini cycles | |
+|---|---:|---|
+| `tiled_matmul_ws` 64×64×64 | {{tm_g}} | against {{tm_c}} on the Rocket core: about {{tm_x}}× |
+| `tiled_matmul_ws_perf` {{perf_dims}} | {{perf_cycles}} | {{util_perf}}% of the ideal {{perf_ideal}} |
+| `conv_perf` batch 4, 224×224×3 → 32, 3×3, stride 2 | {{conv}} | |
+| `conv_dw_perf` depthwise, batch 3, 112×112×17, 3×3, stride 2 | {{conv_dw}} | |
+
+Details and every console log: `llm/fpga/f2/FIRESIM.md` and `llm/fpga/f2/results/`.
+
+## The platform
+
+| | |
+|---|---|
+| FPGA | AWS f2.6xlarge, 1 FPGA, `eu-central-1b` (Frankfurt; the data stays in the EU) |
+| image | FireSim `firesim_gemmini_rocket_singlecore_no_nic`, `agfi-0f567000cb21cb06d`, public and prebuilt |
+| chip | `FireSimLeanGemminiRocketConfig`: one Rocket core and Gemmini, at 30 MHz (measured: {{mhz}} MHz) |
+| Gemmini | 16×16 int8 array, 256 KB scratchpad, 64 KB accumulator, weight-stationary dataflow, int8 read-out |
+| software | Chipyard 1.14.0 (`0acc1e1`), FireSim 1.19.2 AMI, riscv64-unknown-elf-gcc 13.2 |
+| manager | c5.4xlarge (no FPGA), which builds and drives the runs |
+| wall clock | one model run takes about {{wall}} s on the FPGA, and about 1.5 min with setup and flashing. Spike takes about 1 s |
+
+We chose the prebuilt image over building our own bitstream, which takes several hours (#34). The price is the Lean config's limits, and we designed the int8-out contract around them.
+
+## What we did, in order
+
+1. **Dev environment.** Docker for Chipyard, Spike and Gemmini on Apple Silicon (#30). A fresh build takes 19 minutes, and `docker/dev.sh check` runs Gemmini's tests on Spike.
+2. **The GEMM interface.** The list of every matmul in the model (#32), and one backend function for all of them.
+3. **The FPGA path** (#34): FireSim with the public Lean Gemmini image in Frankfurt. The alternative, a custom HDK register GEMM, stays parked as a backup.
+4. **The model** (#38 to #42): an off-the-shelf model instead of training. We checked stories260K's quality under the Lean int8 contract, exported it to int8 with static scales, froze it, and ported it to C.
+5. **Spike** (#44): stories260K bare-metal, with every GEMM on Gemmini, bit-identical to the CPU.
+6. **AWS** (#45 and #46), within a shared account with a tag-based IAM policy:
+   - scripts to launch and set up the manager and the F2;
+   - SSH on port 443 for networks that block port 22;
+   - fixes for the AMI: the conda solver, a glibc lock-file patch, a login shell for Vivado, pyOpenSSL for the `aws` CLI;
+   - start, stop and status scripts.
+7. **The FPGA** (#47):
+   - FireSim set up with the F2 as an externally provisioned run host;
+   - the model on the FPGA, bit-exact;
+   - cycles per token with and without Gemmini;
+   - 20 of Gemmini's tests.
+
+## Conclusions
+
+1. **An open-source hardware stack can run an LLM end to end.** Every piece is open: the RISC-V core, the accelerator, the SoC generator and the FPGA simulation framework. The same RISC-V binary runs on a functional simulator and on a real FPGA, with identical results.
+2. **Integer accelerators work for LLM inference without retraining.** A static int8 calibration of an off-the-shelf model costs {{ppl_cost}} of perplexity and keeps {{top1_lean}}% of top-1 choices, even with the strictest read-out (int8 out).
+3. **Checking bit for bit is cheap and catches real bugs.** Running every GEMM on both backends in the same binary found a sign-of-zero mismatch that comparing tokens would have missed.
+4. **For decoding, the accelerator isn't the bottleneck.** The GEMMs speed up {{gemm_speedup}}×, but the whole model only {{speedup}}×, because what's left on the core (the cache handling, softmax and norms) now dominates. Gemmini itself runs at {{util_llm}}% of peak on one-row GEMMs, against {{util_perf}}% on a large matmul. Batch-1 decode on a systolic array is limited by per-call overhead and by the shape of the matrices, not by compute.
+
+## What's next
+
+In order of expected gain:
+
+1. **Keep the KV cache in int8.** The core then stops re-quantizing the whole cache at every position. This should remove most of the {{g_rest_m}} cycles per token spent outside the GEMMs.
+2. **Batch sequences** (M up to 16) to fill the array's rows, or fuse the three GEMMs that share an input (Q, K and V; W1 and W3).
+3. **Keep the weights on chip.** Pin the most-used layers in the scratchpad, instead of moving them in on every call.
+4. **A bigger model** (#21) and the full Gemmini config (#10: int32 read-out, 110 MHz), for numbers closer to a real workload.
+5. **The rest of Gemmini's tests** on the FPGA (#11), and a cycle-accurate RTL run in Verilator (#25).
+
+## Reproduce
+
+```shell
+make -C llm test-stories                 # the model in C on the Mac
+docker/dev.sh check                      # Gemmini's tests on Spike (docker/README.md)
+make -C llm test-spike                   # stories260K on Spike, every GEMM checked
+# FPGA: aws/README.md sets up the manager and the F2, then, on the manager:
+bash ~/fpga-batch.sh llm-stories-gemmini-baremetal llm-stories-cpu-baremetal
+llm/tools/.venv/bin/python llm/tools/report.py          # this report, its numbers and charts
+```

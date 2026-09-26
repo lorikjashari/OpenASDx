@@ -1,0 +1,44 @@
+llm-stories-gemmini-baremetal  :
+section                        size         addr
+.text.init                      454   2147483648
+.tohost                          72   2147487744
+.text                          9640   2147491840
+.text.startup                  1214   2147501480
+.text.expf                      120   2147502694
+.text.powf                      204   2147502814
+.text.cosf                      124   2147503018
+.text.sinf                      126   2147503142
+.text.nearbyintf                  4   2147503268
+.text.finitef                    14   2147503272
+.text.__kernel_cosf             326   2147503286
+.text.__kernel_sinf             164   2147503612
+.text.__ieee754_expf            598   2147503776
+.text.__ieee754_powf           1914   2147504374
+.text.__ieee754_rem_pio2f       744   2147506288
+.text.scalbnf                   270   2147507032
+.text.rintf                     240   2147507302
+.text.with_errnof                34   2147507542
+.text.xflowf                     20   2147507576
+.text.__math_uflowf              10   2147507596
+.text.__math_oflowf              10   2147507606
+.text.__math_divzerof            46   2147507616
+.text.__math_invalidf            22   2147507662
+.text.__ieee754_sqrtf             6   2147507684
+.text.fabsf                       6   2147507690
+.text.__kernel_rem_pio2f       1930   2147507696
+.text.floorf                    174   2147509626
+.sdata                          360   2147509800
+.rodata.str1.8                 1249   2147510160
+.rodata                      394088   2147511416
+.rodata.npio2_hw                128   2147905504
+.rodata.two_over_pi             792   2147905632
+.rodata.PIo2                     44   2147906424
+.rodata.init_jk                  12   2147906472
+.sbss                            40   2147906488
+.bss                         885792   2147906560
+.tbss                            68   2148792384
+.comment                         45            0
+.riscv.attributes                87            0
+Total                       1301191
+
+
