@@ -22,6 +22,32 @@ Dimensions match a 16-wide systolic array: hidden 64, 4 heads of 16, FFN 128, 2 
 | MLP ReLU | FPGA, `GEMM_FLAG_RELU` |
 | Embed, RMSNorm, RoPE, softmax, residual, KV cache | x86 CPU on the F2 instance |
 
+## Every matmul goes through one GEMM call
+
+Each matmul in `src/model.c` calls `backend_gemm_i8` (`include/backend.h`), either directly or through `linear()`, which calls it at line 123. No matmul bypasses the backend. Shapes are `C[M, N] = A[M, K] · B[K, N]` for one token at position `pos`, with `len = pos + 1`.
+
+| Matmul | Call site | M × N × K | Flags | Per token |
+| --- | --- | --- | --- | --- |
+| QKV (fused Q, K, V projection) | `block_forward`, line 187 | 1 × 192 × 64 | | once per layer |
+| QKᵀ (attention scores) | `attention`, line 166 | 1 × len × 16 | `trans_b` | per layer and head |
+| attention × V | `attention`, line 173 | 1 × 16 × len | | per layer and head |
+| Output projection | `block_forward`, line 198 | 1 × 64 × 64 | | once per layer |
+| MLP up | `block_forward`, line 204 | 1 × 128 × 64 | `relu` | once per layer |
+| MLP down | `block_forward`, line 205 | 1 × 64 × 128 | | once per layer |
+| LM head | `llm_forward`, line 221 | 1 × 64 × 64 | | once, after the last token |
+
+Host-only steps, none of which is a matmul:
+
+| Step | Where |
+| --- | --- |
+| Embed (a row lookup in `tok_emb`) | `embed`, line 215 |
+| RMSNorm | `rmsnorm`, lines 186, 203, 220 |
+| RoPE | `rope`, lines 192–193 |
+| Softmax | `softmax`, line 169 |
+| Residual add | `add_vec`, lines 200, 207 |
+| KV cache write | `block_forward`, lines 194–195 |
+| Activation quantization to int8 | `quantize`, before each GEMM call |
+
 ## Today
 
 ```shell
