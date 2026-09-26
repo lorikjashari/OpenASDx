@@ -6,6 +6,7 @@
 Sources:
   llm/fpga/f2/results/*.uartlog          console output of the FPGA runs (cycles, tokens, tests)
   llm/fpga/f2/results/demo/              the recorded demo run
+  llm/fpga/f2/results/power/             the FPGA's core power, sampled during three runs
   llm/fpga/f2/results/sweep-summary.txt  one line per FPGA run of Gemmini's tests
   llm/fpga/f2/results/stories-gemmini.{size,symbols}.txt   the ELF's sections and symbols
   llm/weights/stories260k.h              the model's shape
@@ -128,6 +129,38 @@ def quality():
     return out, tok, sum(arrays.values())
 
 
+def power():
+    """Mean FPGA core power (Vccint, whole watts) during each run, and in the idle phases around them.
+
+    The runs' windows come from the "Script started/done on" lines of their console logs. Samples
+    with no reading (while FireSim held the FPGA's management channel) are left out."""
+    import csv
+    from datetime import datetime
+    samples = [(float(r["time"]), float(r["watts"])) for r in csv.DictReader((RESULTS / "power/fpga-power.csv").open())
+               if r["watts"]]
+    stamp = lambda s: datetime.fromisoformat(s).timestamp()
+    runs = {}
+    for name in ("llm-demo-firesim", "llm-stories-gemmini-baremetal", "llm-stories-cpu-baremetal"):
+        s = read(f"power/{name}.uartlog")
+        t0 = stamp(re.search(r"Script started on (\S+ \S+)", s).group(1))
+        t1 = stamp(re.search(r"Script done on (\S+ \S+)", s).group(1))
+        w = [x for t, x in samples if t0 <= t <= t1]
+        runs[name] = (np.mean(w), len(w), t0, t1)
+    first = min(r[2] for r in runs.values())
+    last = max(r[3] for r in runs.values())
+    # Before the first flash the slot is cleared; FireSim's first reading gap marks the flash.
+    before = []
+    for t, x in samples:
+        if t >= first:
+            break
+        before.append((t, x))
+    all_t = [float(r["time"]) for r in csv.DictReader((RESULTS / "power/fpga-power.csv").open())]
+    gap = next(t for t, r in zip(all_t, csv.DictReader((RESULTS / "power/fpga-power.csv").open())) if not r["watts"])
+    cleared = [x for t, x in before if t < gap]
+    idle_loaded = [x for t, x in samples if t > last + 10]
+    return runs, np.mean(cleared), np.mean(idle_loaded), len(samples)
+
+
 # ---------------------------------------------------------------- values
 
 def values():
@@ -197,6 +230,14 @@ def values():
     assert "*** PASSED ***" in demo
     dm = re.search(r"(\d+) tokens, \d+ GEMMs, (\d+) cycles per token on average: ([\d.]+) tokens/s", demo)
     demo_tokens, demo_cycles, demo_tps = int(dm.group(1)), int(dm.group(2)), dm.group(3)
+    demo_total = num(r"PASSED \*\*\* after (\d+) cycles", demo)
+    demo_wall = num(r"Wallclock Time Elapsed: ([\d.]+) s", demo, float)
+
+    runs, p_cleared, p_idle, n_power = power()
+    p_g = runs["llm-stories-gemmini-baremetal"][0]
+    p_c = runs["llm-stories-cpu-baremetal"][0]
+    p_d = runs["llm-demo-firesim"][0]
+    j_g, j_c = p_g * g["mean"] / hz, p_c * c["mean"] / hz  # joules per token of the emulator's core rail
 
     util_perf = 100 * perf_ideal / perf_cycles
     util_llm = 100 * macs / g_gemm / PEAK_MACS_PER_CYCLE
@@ -206,6 +247,11 @@ def values():
     f = lambda x: f"{x:,.0f}"
     M = lambda x: f"{x / 1e6:.2f}M"
     v = {
+        "p_cleared": f"{p_cleared:.0f}", "p_idle": f"{p_idle:.0f}", "n_power": n_power,
+        "p_g": f"{p_g:.1f}", "p_c": f"{p_c:.1f}", "p_d": f"{p_d:.1f}",
+        "j_g": f"{j_g:.2f}", "j_c": f"{j_c:.2f}",
+        "demo_total_m": f"{demo_total / 1e6:.0f}M", "demo_wall": f"{demo_wall:.1f}",
+        "demo_mhz": f"{demo_total / demo_wall / 1e6:.1f}",
         "demo_tokens": demo_tokens, "demo_cycles_m": f"{demo_cycles / 1e6:.1f}M", "demo_tps": demo_tps,
         "prompt": prompt_text, "text": text, "params": f(params), "run_s": run_s,
         "layers": layers, "dim": dim, "hidden": hidden, "heads": heads, "kv_heads": kv_heads,

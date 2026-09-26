@@ -140,6 +140,24 @@ Gemmini has 320 KB of on-chip memory: a 256 KB scratchpad and a 64 KB accumulato
 
 We didn't measure the FPGA resources (LUTs, BRAM): the image is FireSim's prebuilt `agfi-0f567000cb21cb06d`, and we didn't synthesize it.
 
+### FPGA power
+
+The F2 reports the power of its FPGA's core supply rail (Vccint) in whole watts (`fpga-describe-local-image -M`). We sampled it about once a second during three runs (278 readings, `llm/fpga/f2/results/power/`), and matched the samples to each run by the start and end times in its console log.
+
+| phase | FPGA core power |
+|---|---:|
+| slot cleared, no image loaded | 9 W |
+| Gemmini image loaded, idle | 3 W |
+| demo run (100 tokens) | 4.9 W |
+| stories260K, Gemmini build | 4.4 W |
+| stories260K, Rocket core only | 4.0 W |
+
+- **With a run on it, the FPGA core draws about 4–5 W**, 1 to 2 W more than when it's loaded and idle.
+- **The readings can't tell Gemmini working apart from the core alone.** The differences between the runs are less than one reading step, and they follow the readings' steady drift downwards over the session. The cleared slot draws more than a loaded image, probably from the default image a cleared FPGA holds.
+- **Energy per token for the emulator's core rail:** about 0.49 J with Gemmini and 1.01 J without, the power times the time per token at the FPGA's clock. Gemmini saves energy here mostly because a token takes less time, not because the power changes.
+
+This is the power of an FPGA emulating the chip, not of a Gemmini chip. An FPGA spends many LUTs and routing on each gate of the design, and it runs at 30 MHz. A chip built from the same RTL would use far less energy per token. The rail also leaves out the FPGA card's DRAM and I/O, and the F2's host CPU.
+
 ### Gemmini's own tests on the FPGA
 
 We ran 20 bare-metal tests: **15 pass, which is every test within the Lean image's features**. The other 5 need features the image leaves out, and the model uses none of them:
@@ -190,6 +208,40 @@ We chose the prebuilt image over building our own bitstream, which takes several
    - the model on the FPGA, bit-exact;
    - cycles per token with and without Gemmini;
    - 20 of Gemmini's tests.
+
+## Questions and answers
+
+**Does the whole model run on the FPGA, or only the parts that fit in Gemmini?** The whole model. The FPGA holds a complete RISC-V chip: Gemmini does all 116 matrix multiplications per token, and the Rocket core next to it does everything else (int8 quantization of the activations, RMSNorm, RoPE, softmax, the KV cache, SwiGLU, choosing the next token). The weights, the KV cache and the activations live in the chip's memory, which is the DRAM on the FPGA card. The F2's x86 host only loads the program and relays the console. Gemmini doesn't have to hold the model: it streams each weight matrix in from the chip's memory for each GEMM.
+
+**How does attention work?** For each of the 5 layers and 8 heads, at each position:
+1. Gemmini computes the projections q, k and v.
+2. The core applies RoPE, and appends k and v to the KV cache.
+3. Gemmini computes the scores q·Kᵀ over every cached position (one GEMM).
+4. The core scales them by 1/√d and applies the softmax.
+5. Gemmini computes probabilities × V (a second GEMM), and then the output projection.
+
+The 8 query heads share 4 KV heads (grouped-query attention). Before each GEMM, the core quantizes the inputs to int8, which for attention means the whole cached K and V at every position. That's the main cost outside the GEMMs.
+
+**Where do the weights come from, and how do they get onto the FPGA?**
+1. The float checkpoint is karpathy/tinyllamas' `stories260K.bin`, trained on TinyStories.
+2. `llm/tools/export_stories.py` quantized it once to int8, and froze it as C arrays in `llm/weights/stories260k.h`, whose SHA-256 is in `llm/weights/TASK.md`.
+3. The compiler puts those arrays into the program (the ELF).
+4. `firesim infrasetup` copies the ELF to the F2's host.
+5. At the start of a run, the FireSim driver writes it into the chip's memory on the FPGA card, over the chip's debug link.
+
+From then on, nothing comes from outside until the text goes out through the UART.
+
+**How can a 30 MHz chip be this fast?** The model is tiny: 271,808 MACs per token, against about 124M for GPT-2 small and 7 billion for a 7B-parameter model. At 30 MHz, Gemmini's peak is 7.6 GMAC/s, enough in theory for tens of thousands of tokens/s of this model. We reach 9.0 tokens/s, 0.2% of that peak (see "Compute"). With a GPT-2-sized model, the same chip would take minutes per token.
+
+**How do we know it's the FPGA doing the work?**
+- The chip's own cycle counter matches the wall clock at the FPGA's speed: the demo ran 776M cycles in 26.0 s, which is 29.8 MHz.
+- Every log names the loaded FPGA image and its PCI device.
+- The Gemmini tests that fail are exactly those that need features this image leaves out.
+- In the checked build, every GEMM result from Gemmini matches the core's bit for bit.
+
+**Is the output the same everywhere?** The FPGA, Spike and the same C code on the Mac give identical tokens: all 30 of the test, and all 100 of the demo. The numpy reference (float64, same int8 contract) matches the first 23 of 30, then diverges at a near-tie (footnote ¹). Against the unquantized float model, the int8 model picks the same next token 95.2% of the time.
+
+**Is there a GPU anywhere?** No. The F2 has an x86 host CPU and the FPGA card, and the model runs on the FPGA. Nothing simulates the FPGA: it's the real hardware, programmed with our chip's design.
 
 ## Conclusions
 

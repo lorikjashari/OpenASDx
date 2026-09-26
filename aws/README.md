@@ -105,6 +105,17 @@ ssh -t ogsa-firesim-manager 'bash -l ~/fpga-record.sh ~/OpenASDx/llm/llm-demo-fi
 
 The script flashes the F2 off camera, then records `firesim runworkload` with asciinema while it follows the chip's console live. It writes `~/recordings/NAME.cast` and `NAME.gif`. It needs asciinema in `~/rec-venv` (`python3 -m venv ~/rec-venv && ~/rec-venv/bin/pip install asciinema`) and [`agg`](https://github.com/asciinema/agg/releases) in `~/agg`. `img/demo/README.md` explains the demo recording.
 
+## Measure the FPGA's power
+
+```
+scp aws/manager/fpga-power.sh ogsa-firesim-f2:~/
+ssh ogsa-firesim-f2 'setsid nohup bash ~/fpga-power.sh ~/power.csv >/dev/null 2>&1 < /dev/null &'
+# ... run things on the manager ...
+ssh ogsa-firesim-f2 'pkill -f fpga-power.sh'
+```
+
+The script reads the FPGA's core power (Vccint, in whole watts) from `fpga-describe-local-image -M` about once a second. `REPORT.md`, "FPGA power", has the results.
+
 ## Daily use
 
 ```

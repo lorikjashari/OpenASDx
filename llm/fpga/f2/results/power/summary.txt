@@ -1,0 +1,4 @@
+llm-demo-firesim                               117s  *** PASSED *** after 775844057 cycles
+llm-stories-gemmini-baremetal                  105s  *** PASSED *** after 962287202 cycles
+llm-stories-cpu-baremetal                      123s  *** PASSED *** after 1072549277 cycles
+BATCH DONE
