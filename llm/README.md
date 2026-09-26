@@ -28,7 +28,7 @@ The demo model is the pretrained `stories260K` (tinyllamas, llama2.c), not the r
 
 The frozen model is `weights/stories260k.h`: int8 weights and calibrated scales, committed, with its SHA-256 in `weights/TASK.md`. `make stories` re-exports it, but only run that on purpose.
 
-`tools/stories_int8.py` compares the model in float and int8 under Gemmini's GEMM contracts. `tools/export_stories.py` writes the C header, then checks it by reading it back. Both need only numpy, and `make stories` creates `tools/.venv` for them. Porting the architecture into `src/model.c` is #6.
+`tools/stories_int8.py` compares the model in float and int8 under Gemmini's GEMM contracts. `tools/export_stories.py` writes the C header, then checks it by reading it back. Both need only numpy, and `make stories` creates `tools/.venv` for them. `make test-stories` runs it in C on the Mac (CPU backend). `make test-spike`, run in the Chipyard container, runs it bare-metal on Spike with every GEMM on Gemmini, checked bit for bit against the CPU reference (see `fpga/f2/SPIKE.md`).
 
 ## Every matmul goes through one GEMM call
 

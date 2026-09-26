@@ -2,3 +2,5 @@ tools/.venv/
 weights/stories260K/
 __pycache__/
 llm-stories
+llm-stories-baremetal
+build-riscv/
