@@ -48,4 +48,5 @@ void backend_gemm_i8_o8(const int8_t *A, const int8_t *B, float *C,
   }
 }
 
-long backend_mismatches(void) { return 0; }
+/* A single backend compares nothing (backend_check.c does). */
+long backend_mismatches(void) { return -1; }

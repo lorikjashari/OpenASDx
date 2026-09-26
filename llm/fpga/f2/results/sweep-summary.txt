@@ -1,0 +1,21 @@
+tiled_matmul_ws_perf-baremetal                 102s  *** PASSED *** after 386919647 cycles
+conv_perf-baremetal                             74s  *** PASSED *** after 429019712 cycles
+conv_dw_perf-baremetal                          74s  *** PASSED *** after 392933942 cycles
+llm-stories-gemmini-baremetal                   95s  *** PASSED *** after 940234787 cycles
+llm-stories-cpu-baremetal                       95s  *** PASSED *** after 1072549277 cycles
+mvin_mvout-baremetal                            64s  *** PASSED *** after 44104832 cycles
+mvin_mvout_acc-baremetal                        64s  *** PASSED *** after 48114362 cycles
+mvin_scale-baremetal                            64s  *** PASSED *** after 44104832 cycles
+matmul_ws-baremetal                            136s  *** FAILED *** (code = 1) after 2249346332 cycles
+tiled_matmul_ws_At-baremetal                    64s  *** PASSED *** after 178424087 cycles
+tiled_matmul_ws_Bt-baremetal                    64s  *** PASSED *** after 178424087 cycles
+tiled_matmul_ws_full_C-baremetal               271s  *** FAILED *** (code = 1) after 6238828682 cycles
+tiled_matmul_ws_low_D-baremetal                 64s  *** PASSED *** after 178424087 cycles
+conv-baremetal                                  75s  *** PASSED *** after 392933942 cycles
+conv_with_pool-baremetal                        74s  *** PASSED *** after 495176957 cycles
+conv_dw-baremetal                               74s  *** PASSED *** after 380905352 cycles
+resadd-baremetal                                64s  *** PASSED *** after 144343082 cycles
+transpose-baremetal                            241s  *** FAILED *** (code = 1) after 1669969247 cycles
+global_average-baremetal                        65s  *** PASSED *** after 112266842 cycles
+padded-baremetal                                74s  *** FAILED *** (code = 1) after 334795757 cycles
+raw_hazard-baremetal                           126s  *** FAILED *** (code = 1) after 1872450512 cycles

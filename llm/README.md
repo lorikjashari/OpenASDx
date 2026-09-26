@@ -74,7 +74,7 @@ Decided in #34. The FPGA runs a whole Chipyard chip, Rocket and Gemmini, built b
 - **Lean config:** 16×16 array, 256 KB scratchpad and 64 KB accumulator, WS dataflow only. Gemmini accumulates in int32, but it cannot move int32 results out (`acc_read_full_width = false`). Each GEMM result is scaled to int8 on Gemmini before it leaves the accelerator, and the CPU reference applies the same scaling so the backends stay bit-exact (#33).
 - **Optional later:** building `firesim_rocket_singlecore_gemmini_no_nic_l2_llc4mb_ddr3` (the full `GemminiRocketConfig`, 110 MHz) brings back int32 read-out. That is a bitstream build of several hours (#10).
 
-Steps: #35 (AWS access, done except for the manager), #11 (FireSim manager, load the image, Gemmini's tests on F2), #12 (the model on F2).
+**Done on 2026-09-26:** stories260K runs on the F2 with all 3,944 GEMMs on Gemmini, bit for bit equal to the CPU, and gives the same tokens as Spike and the Mac. Gemmini's `tiled_matmul_ws` test passes too. See `fpga/f2/FIRESIM.md` for the results and how to reproduce them, and `aws/README.md` for the machines.
 
 ## Backup: HDK register GEMM
 
