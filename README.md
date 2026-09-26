@@ -24,6 +24,8 @@ Dependencies
 
 Before beginning, install the [Chipyard dependencies](https://chipyard.readthedocs.io/en/latest/Chipyard-Basics/Initial-Repo-Setup.html#default-requirements-installation).
 
+On an Apple Silicon Mac, use the Docker setup in [`docker/`](docker/README.md) instead. It installs Chipyard, Spike and this repo's Gemmini Spike model in an amd64 container.
+
 Installing Chipyard and Spike
 -----------------------------
 
