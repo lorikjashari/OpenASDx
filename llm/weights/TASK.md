@@ -21,6 +21,8 @@ The float model continues differently after "outside in the": `park. One day,`. 
 
 The expected token ids are `st_expected` in `stories260k.h`.
 
+The C model (`make -C llm test-stories`, CPU backend) matches the first 23 of these 30 tokens, then continues with `park. One day,`. That's not a bug. At token 23, the top two candidates in the Python reference are 0.1691 apart, exactly one int8 step of the LM head's output scale. float32 in C against float64 in Python flips that one rounding. The test therefore checks a 16-token prefix. Bit-exactness is checked between the CPU and Gemmini backends on the same platform (#33).
+
 ## Frozen model
 
 `llm/weights/stories260k.h` is the frozen model: the int8 weights, one scale per weight tensor, and the 46 static output scales, calibrated once. It is committed, so the CPU, Spike and the FPGA all use the same bytes.
