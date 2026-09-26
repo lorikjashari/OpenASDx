@@ -22,6 +22,10 @@ Prompt: **"Once upon a time"**. What the model wrote on the FPGA:
 
 This is a live recording of the FPGA run (idle pauses shortened to 2 s). The chip prints each word through its UART as soon as it has chosen it. The words arrive faster at first and slower later, because each position costs more than the one before it (see "Speed"). This run generates 100 tokens instead of 30, at 7.0M cycles per token on average, which is 4.2 tokens/s at 30 MHz. The console log is in `llm/fpga/f2/results/demo/`, and `img/demo/README.md` explains how it was recorded.
 
+**The interactive demo.** Here you type the start of a story, and the chip continues it. The chip reads the prompt through its UART, tokenizes it itself (llama2.c's BPE, ported to C and checked against the Python tokenizer by `make -C llm test-encoder`), and generates with every GEMM on Gemmini. Each prompt starts a new story. In this recording, a script types the two prompts. `aws/manager/fpga-chat.sh` gives you the same session to type into yourself.
+
+![The interactive demo on the F2 FPGA](img/demo/stories260k-fpga-chat.gif)
+
 ## What we built
 
 ```mermaid

@@ -11,4 +11,7 @@ llm-stories-cpu-baremetal
 llm-demo
 llm-demo-baremetal
 llm-demo-firesim
+llm-encode
+llm-chat
+llm-chat-firesim
 build-riscv/

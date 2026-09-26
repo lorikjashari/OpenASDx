@@ -9,7 +9,7 @@ OpenASDx runs a small language model on open hardware. The model is stories260K,
 
 ![stories260K writing a story on the AWS F2 FPGA, every matmul on Gemmini](img/demo/stories260k-fpga.gif)
 
-*stories260K on the real FPGA, recorded live: the chip prints each word as soon as it has chosen it (`llm-demo-firesim`, [img/demo/](img/demo/README.md)).*
+*stories260K on the real FPGA, recorded live: the chip prints each word as soon as it has chosen it (`llm-demo-firesim`, [img/demo/](img/demo/README.md)). There is also an [interactive version](img/demo/stories260k-fpga-chat.gif), where you type the start of the story.*
 
 **Read the results in [REPORT.md](REPORT.md).** In short, on the FPGA:
 <!-- report:summary start (written by llm/tools/report.py) -->

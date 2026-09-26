@@ -96,6 +96,19 @@ bash ~/fpga-run.sh path/to/program-baremetal
 
 The script wraps the ELF as a FireSim workload, runs `firesim infrasetup` (which copies the workload to the F2), then `firesim runworkload`, and prints the console output. A run takes about 1–1.5 minutes. `llm/fpga/f2/FIRESIM.md` has the stories260K run.
 
+## The interactive demo
+
+```
+scp aws/manager/fpga-chat.sh aws/manager/fpga-workload.sh ogsa-firesim-manager:~/
+ssh -t ogsa-firesim-manager 'bash -l ~/fpga-chat.sh'
+```
+
+The script flashes the F2 (about a minute), starts the chip, and attaches your terminal to its console. Type the start of a story and press Enter: the chip continues it at about 4 tokens/s. Each prompt starts a new story.
+- **Ctrl-D** ends the program and the simulation.
+- **Ctrl-A then D** leaves the console with the chip still running. The script prints the command to come back.
+
+The program is `llm/llm-chat-firesim` (`make -C llm llm-chat-firesim` on the manager). To try it on the Mac first, run `make -C llm chat`.
+
 ## Record a run
 
 ```
@@ -103,7 +116,7 @@ scp aws/manager/fpga-record.sh aws/manager/uart-follow.py ogsa-firesim-manager:~
 ssh -t ogsa-firesim-manager 'bash -l ~/fpga-record.sh ~/OpenASDx/llm/llm-demo-firesim NAME'
 ```
 
-The script flashes the F2 off camera, then records `firesim runworkload` with asciinema while it follows the chip's console live. It writes `~/recordings/NAME.cast` and `NAME.gif`. It needs asciinema in `~/rec-venv` (`python3 -m venv ~/rec-venv && ~/rec-venv/bin/pip install asciinema`) and [`agg`](https://github.com/asciinema/agg/releases) in `~/agg`. `img/demo/README.md` explains the demo recording.
+The script flashes the F2 off camera, then records `firesim runworkload` with asciinema while it follows the chip's console live. With a third argument, a file with one prompt per line (for example `aws/manager/demo-prompts.txt`), `fpga-type.sh` on the F2 types the prompts into the interactive demo. It writes `~/recordings/NAME.cast` and `NAME.gif`. It needs asciinema in `~/rec-venv` (`python3 -m venv ~/rec-venv && ~/rec-venv/bin/pip install asciinema`) and [`agg`](https://github.com/asciinema/agg/releases) in `~/agg`. `img/demo/README.md` explains the demo recording.
 
 ## Measure the FPGA's power
 

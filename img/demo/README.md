@@ -10,4 +10,6 @@ How it was made (`aws/manager/fpga-record.sh`, on the FireSim manager):
 
 The demo prints through the chip's UART, which FireSim shows with little delay. `first-try-htif/` is the first attempt, which printed through HTIF (`printstr`), the host link the other tests use. Each HTIF write waits for the host, about 21M cycles or 0.7 s, so the words came about one per second, much slower than the chip computes them. The whole run then took 3.58G cycles, against 776M with the UART.
 
-The run's full console log and FireSim's logs are in `llm/fpga/f2/results/demo/`.
+`stories260k-fpga-chat.gif` is the interactive demo (`llm-chat-firesim`), recorded the same way. On the F2, `aws/manager/fpga-type.sh` types the prompts from `aws/manager/demo-prompts.txt` into the chip's console, at about 12 characters a second, and waits for each story to finish.
+
+The runs' full console logs and FireSim's logs are in `llm/fpga/f2/results/demo/`.
