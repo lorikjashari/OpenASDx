@@ -346,3 +346,6 @@ waveforms/
 # Local RISC-V toolchain and Spike build (multi-GB, over GitHub's file limit)
 .tools/
 
+
+# direnv personal settings
+.envrc.local
