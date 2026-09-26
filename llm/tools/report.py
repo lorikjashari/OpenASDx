@@ -7,6 +7,7 @@ Sources:
   llm/fpga/f2/results/*.uartlog          console output of the FPGA runs (cycles, tokens, tests)
   llm/fpga/f2/results/demo/              the recorded demo run
   llm/fpga/f2/results/power/             the FPGA's core power, sampled during three runs
+  llm/bench/results/mac/                 the same model on an Apple M4 Pro, with powermetrics samples
   llm/fpga/f2/results/sweep-summary.txt  one line per FPGA run of Gemmini's tests
   llm/fpga/f2/results/stories-gemmini.{size,symbols}.txt   the ELF's sections and symbols
   llm/weights/stories260k.h              the model's shape
@@ -161,6 +162,54 @@ def power():
     return runs, np.mean(cleared), np.mean(idle_loaded), len(samples)
 
 
+MAC = ROOT / "llm/bench/results/mac"
+MAC_RUNS = [  # name, label in the report
+    ("c-int8-1core", "C int8 (our code), 1 core"),
+    ("torch-cpu-1t-b1", "PyTorch float, CPU 1 thread, 1 sequence"),
+    ("torch-cpu-b64", "PyTorch float, CPU all cores, 64 sequences"),
+    ("torch-mps-b1", "PyTorch float, GPU, 1 sequence"),
+    ("torch-mps-b64", "PyTorch float, GPU, 64 sequences"),
+    ("torch-mps-b1024", "PyTorch float, GPU, 1,024 sequences"),
+]
+
+
+def powermetrics(path):
+    """The samples of a powermetrics text log: time, CPU, GPU and combined power (mW), and the
+    frequency and residency of the busiest CPU core."""
+    import gzip
+    from datetime import datetime
+    text = gzip.open(path, "rt", errors="replace").read()
+    out = []
+    for block in text.split("*** Sampled system activity (")[1:]:
+        t = datetime.strptime(block.split(")")[0], "%a %b %d %H:%M:%S %Y %z").timestamp()
+        mw = lambda k: float(re.search(k + r": (\d+) mW", block).group(1))
+        cores = re.findall(r"CPU (\d+) frequency: (\d+) MHz\nCPU \1 active residency:\s+([\d.]+)%", block)
+        busy = max(cores, key=lambda c: float(c[2]))
+        out.append({"t": t, "cpu": mw("CPU Power"), "gpu": mw("GPU Power"),
+                    "all": mw(r"Combined Power \(CPU \+ GPU \+ ANE\)"), "mhz": float(busy[1])})
+    return out
+
+
+def mac():
+    """Speed and energy of each Mac run. Samples count only inside the run's timed window (one
+    second in from each end, since the log's time stamps have one-second resolution)."""
+    import json
+    idle = powermetrics(MAC / "idle.power.txt.gz")
+    p_idle = np.mean([x["all"] for x in idle]) / 1e3
+    runs = []
+    for name, label in MAC_RUNS:
+        r = json.loads((MAC / f"{name}.json").read_text())
+        ss = [x for x in powermetrics(MAC / f"{name}.power.txt.gz") if r["t_start"] + 1 <= x["t"] <= r["t_end"] - 1]
+        w = {k: np.mean([x[k] for x in ss]) / 1e3 for k in ("all", "cpu", "gpu")}
+        runs.append({"name": name, "label": label, "tps": r["tokens_per_s"], "batch": r["batch"],
+                     "tokens": r["first_tokens"], "watts": w["all"], "cpu_w": w["cpu"], "gpu_w": w["gpu"],
+                     "mj": w["all"] / r["tokens_per_s"] * 1e3, "mj_above_idle": (w["all"] - p_idle) / r["tokens_per_s"] * 1e3,
+                     "samples": len(ss), "ns": r.get("ns_per_token"),
+                     "mhz": np.mean([x["mhz"] for x in ss])})
+    machine = (MAC / "machine.txt").read_text().split("\n")[0].strip()
+    return runs, p_idle, machine
+
+
 # ---------------------------------------------------------------- values
 
 def values():
@@ -239,14 +288,37 @@ def values():
     p_d = runs["llm-demo-firesim"][0]
     j_g, j_c = p_g * g["mean"] / hz, p_c * c["mean"] / hz  # joules per token of the emulator's core rail
 
+    mruns, mac_idle, machine = mac()
+    by = {r["name"]: r for r in mruns}
+    c1 = by["c-int8-1core"]
+    assert c1["tokens"] == g["tokens"], "the Mac's C build should give the FPGA's tokens"
+    m4_cycles = c1["ns"] * c1["mhz"] / 1e3  # ns x MHz / 1000 = cycles
+    best = min(mruns, key=lambda r: r["mj"])
+    fpga_mj_g = j_g * 1e3
+
     util_perf = 100 * perf_ideal / perf_cycles
     util_llm = 100 * macs / g_gemm / PEAK_MACS_PER_CYCLE
 
     charts(g, c, prompt, g_gemm, c_gemm, hz, util_perf, util_llm, perf_dims)
+    comparison_charts(mruns, g, c, hz, j_g, j_c, m4_cycles, machine)
 
     f = lambda x: f"{x:,.0f}"
     M = lambda x: f"{x / 1e6:.2f}M"
     v = {
+        "machine": machine, "mac_idle_mw": f"{mac_idle * 1e3:.0f}",
+        "mac_rows": "\n".join(
+            f"| {r['label']} | {r['tps']:,.0f} | {r['watts']:.1f} W (CPU {r['cpu_w']:.1f}, GPU {r['gpu_w']:.1f}) | {r['mj']:.2f} mJ |"
+            for r in mruns),
+        "c1_tps": f"{c1['tps']:,.0f}", "c1_us": f"{c1['ns'] / 1e3:.0f}", "c1_ghz": f"{c1['mhz'] / 1e3:.1f}",
+        "c1_mj": f"{c1['mj']:.2f}", "m4_cycles_m": f"{m4_cycles / 1e6:.2f}M",
+        "m4_vs_rocket": f"{c['mean'] / m4_cycles:.0f}", "m4_vs_gemmini": f"{g['mean'] / m4_cycles:.0f}",
+        "gpu1_tps": f"{by['torch-mps-b1']['tps']:,.0f}", "gpu1024_tps": f"{by['torch-mps-b1024']['tps']:,.0f}",
+        "gpu1024_mj": f"{by['torch-mps-b1024']['mj']:.2f}", "gpu1024_w": f"{by['torch-mps-b1024']['watts']:.0f}",
+        "gpu1_vs_c": f"{c1['tps'] / by['torch-mps-b1']['tps']:.0f}",
+        "gpu1024_vs_c": f"{by['torch-mps-b1024']['tps'] / c1['tps']:.0f}",
+        "c1_vs_fpga_speed": f"{c1['tps'] / (hz / g['mean']):,.0f}",
+        "fpga_vs_c1_energy": f"{fpga_mj_g / c1['mj']:,.0f}",
+        "best_label": best["label"], "best_mj": f"{best['mj']:.2f}",
         "p_cleared": f"{p_cleared:.0f}", "p_idle": f"{p_idle:.0f}", "n_power": n_power,
         "p_g": f"{p_g:.1f}", "p_c": f"{p_c:.1f}", "p_d": f"{p_d:.1f}",
         "j_g": f"{j_g:.2f}", "j_c": f"{j_c:.2f}",
@@ -353,6 +425,42 @@ def charts(g, c, prompt, g_gemm, c_gemm, hz, util_perf, util_llm, perf_dims):
     ax.set_title("Gemmini utilization on the FPGA")
     fig.tight_layout()
     fig.savefig(OUT / "gemmini-utilization.png", dpi=150)
+    plt.close("all")
+
+
+def comparison_charts(mruns, g, c, hz, j_g, j_c, m4_cycles, machine):
+    plt.rcParams.update({"font.size": 11, "axes.spines.top": False, "axes.spines.right": False})
+    rows = [("FPGA: Rocket core only", hz / c["mean"], j_c * 1e3, CPU),
+            ("FPGA: Rocket + Gemmini", hz / g["mean"], j_g * 1e3, GEMMINI)]
+    rows += [(f"M4 Pro: {r['label']}", r["tps"], r["mj"], "#2ca02c" if "C int8" in r["label"] else
+              ("#9467bd" if "GPU" in r["label"] else "#8c564b")) for r in mruns]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.6), sharey=True)
+    names = [r[0] for r in rows]
+    for ax, col, title, unit in ((axes[0], 1, "tokens per second", "tokens/s (log)"),
+                                 (axes[1], 2, "energy per token", "millijoules per token (log)")):
+        vals = [r[col] for r in rows]
+        bars = ax.barh(names, vals, color=[r[3] for r in rows])
+        ax.set_xscale("log")
+        ax.bar_label(bars, labels=[f"{v:,.0f}" if v >= 10 else f"{v:.2f}" for v in vals], padding=3, fontsize=9)
+        ax.set_title(title)
+        ax.set_xlabel(unit)
+        ax.set_xlim(min(vals) / 3, max(vals) * 12)
+    axes[0].invert_yaxis()
+    fig.suptitle(f"stories260K: the F2 FPGA (emulating the chip at 30 MHz) against an {machine}", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(OUT / "comparison.png", dpi=150)
+
+    fig, ax = plt.subplots(figsize=(7, 2.8))
+    names = ["Rocket core only (FPGA)", "Rocket + Gemmini (FPGA)", f"{machine} core, same C code"]
+    vals = [c["mean"] / 1e6, g["mean"] / 1e6, m4_cycles / 1e6]
+    bars = ax.barh(names, vals, color=[CPU, GEMMINI, "#2ca02c"])
+    ax.bar_label(bars, fmt="%.2fM", padding=3)
+    ax.invert_yaxis()
+    ax.set_xlim(0, max(vals) * 1.2)
+    ax.set_xlabel("million cycles per generated token (M4: time x its clock)")
+    ax.set_title("Cycles per token, independent of the clock")
+    fig.tight_layout()
+    fig.savefig(OUT / "cycles-comparison.png", dpi=150)
     plt.close("all")
 
 
