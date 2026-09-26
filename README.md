@@ -1,15 +1,15 @@
 <p align="center">
-  <img width="1000" src="./img/full-logo.svg">
+  <img width="1000" alt="OpenASDx" src="./img/openasdx.png">
 </p>
 
-OpenASDx: an LLM on Gemmini, on a real FPGA
-====================================
+OpenASDx
+========
+
+OpenASDx runs a small language model on open hardware. The model is stories260K, and **every matrix multiplication runs on [Gemmini](https://github.com/ucb-bar/gemmini)**, UC Berkeley's open-source systolic-array accelerator for RISC-V: first on the Spike simulator, then on a real **AWS F2 FPGA** through FireSim. This repository is our Gemmini fork, built for the hackathon "Towards an Open-Source GPU for Science".
 
 ![stories260K writing a story on the AWS F2 FPGA, every matmul on Gemmini](img/demo/stories260k-fpga.gif)
 
 *stories260K on the real FPGA, recorded live: the chip prints each word as soon as it has chosen it (`llm-demo-firesim`, [img/demo/](img/demo/README.md)).*
-
-This repo is a fork of [Gemmini](https://github.com/ucb-bar/gemmini), UC Berkeley's open-source systolic-array accelerator for RISC-V (upstream documentation below). We built it for the hackathon "Towards an Open-Source GPU for Science". On top of Gemmini, we run a language model, stories260K, with **every matrix multiplication on Gemmini**: first on the Spike simulator, then on a real **AWS F2 FPGA** through FireSim.
 
 **Read the results in [REPORT.md](REPORT.md).** In short, on the FPGA:
 <!-- report:summary start (written by llm/tools/report.py) -->
@@ -27,12 +27,12 @@ This repo is a fork of [Gemmini](https://github.com/ucb-bar/gemmini), UC Berkele
 | [`aws/`](aws/README.md) | launching and setting up the FireSim manager and the F2, and running a binary on the FPGA |
 | [`docker/`](docker/README.md) | Chipyard, Spike and Gemmini on an Apple Silicon Mac |
 
-The Gemmini on the FPGA is FireSim's prebuilt image `FireSimLeanGemminiRocketConfig`: a 16×16 int8 array with a 256 KB scratchpad and a 64 KB accumulator, weight-stationary only, with int8 read-out. The model follows that config's int8-out contract, described in `llm/README.md`.
+On the FPGA, Gemmini is FireSim's prebuilt image `FireSimLeanGemminiRocketConfig`: a 16×16 int8 array with a 256 KB scratchpad and a 64 KB accumulator, weight-stationary only, with int8 read-out. The model follows that config's int8-out contract, described in `llm/README.md`.
 
 Gemmini
-====================================
+=======
 
-[Gemmini](https://github.com/ucb-bar/gemmini) is a full-system, full-stack DNN hardware exploration and evaluation platform from UC Berkeley, part of the [Chipyard](https://github.com/ucb-bar/chipyard) ecosystem and written in [Chisel](https://www.chisel-lang.org/). At its heart is a systolic array for matrix multiplications, with an explicitly managed scratchpad and accumulator, a DMA engine, and custom RISC-V instructions issued from a Rocket or BOOM core over RoCC.
+[Gemmini](https://github.com/ucb-bar/gemmini) is the accelerator OpenASDx runs on: a full-system DNN hardware exploration platform from UC Berkeley, part of the [Chipyard](https://github.com/ucb-bar/chipyard) ecosystem and written in [Chisel](https://www.chisel-lang.org/). At its heart is a systolic array for matrix multiplications, with an explicitly managed scratchpad and accumulator, a DMA engine, and custom RISC-V instructions issued from a Rocket or BOOM core over RoCC.
 
 ![Gemmini's high-level architecture](./img/gemmini-system.png)
 
