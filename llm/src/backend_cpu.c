@@ -35,13 +35,17 @@ void backend_gemm_i8_o8(const int8_t *A, const int8_t *B, float *C,
         int8_t b = trans_b ? B[n * K + k] : B[k * N + n];
         acc += (int32_t)A[m * K + k] * (int32_t)b;
       }
-      /* float multiply, then round half to even (the default rounding mode), as ACC_SCALE does */
+      /* float multiply, then round half to even (the default rounding mode), as ACC_SCALE does.
+         Like the hardware, go through an integer: a float -0.0 from the rounding becomes 0. */
       float y = nearbyintf((float)acc * acc_scale);
       if (y > 127.f)
         y = 127.f;
       if (y < -128.f)
         y = -128.f;
-      C[m * N + n] = y * out_scale;
+      int8_t q = (int8_t)y;
+      C[m * N + n] = (float)q * out_scale;
     }
   }
 }
+
+long backend_mismatches(void) { return 0; }

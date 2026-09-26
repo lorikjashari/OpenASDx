@@ -61,6 +61,9 @@ int main(void) {
   printf("  %d of %d generated tokens match the Python reference (weights/TASK.md)\n", same, ne);
   expect(same >= PREFIX, "the first " PREFIX_STR " generated tokens match the Python reference");
 
+  long mismatches = backend_mismatches();
+  expect(mismatches == 0, "no GEMM output differs between backends");
+
   printf("\n%ld GEMMs on the backend for %d positions\n", gemms, n - 1);
   printf("tokens:");
   for (int i = 0; i < n; i++)

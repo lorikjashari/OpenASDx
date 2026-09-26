@@ -27,4 +27,8 @@ void backend_gemm_i8_o8(const int8_t *A, const int8_t *B, float *C,
                         int M, int N, int K, int trans_b,
                         float acc_scale, float out_scale);
 
+/* Elements that differed between two backends run side by side (src/backend_check.c).
+   Single backends return 0. */
+long backend_mismatches(void);
+
 #endif
