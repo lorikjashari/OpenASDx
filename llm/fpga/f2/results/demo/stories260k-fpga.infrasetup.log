@@ -6,7 +6,7 @@ FireSim Manager. Docs: https://docs.fires.im
 Running: infrasetup
 
 firesim_gemmini_rocket_singlecore_no_nic is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
-run_farm_hosts_dict defaultdict(<class 'list'>, {'172.31.41.234': [(<runtools.run_farm.Inst object at 0x7b7b419b0700>, None)]})
+run_farm_hosts_dict defaultdict(<class 'list'>, {'172.31.41.234': [(<runtools.run_farm.Inst object at 0x7dd68cda4700>, None)]})
 set_server_hardware_config 0 None
 [172.31.41.234] Checking if host instance is up...
 Building FPGA software driver for f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Config
@@ -39,7 +39,7 @@ Building FPGA software driver for f2-firesim-FireSim-FireSimLeanGemminiRocketCon
 [localhost] out: 
 get_local_driver_dir f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Config
 [localhost] local: pwd
-[localhost] run: rsync -pthrvz -L ../sim/output/f2/f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Config/FireSim-f2 /tmp/tmpki865ylb/
+[localhost] run: rsync -pthrvz -L ../sim/output/f2/f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Config/FireSim-f2 /tmp/tmp91c23000/
 [localhost] out: sending incremental file list
 [localhost] out: FireSim-f2
 [localhost] out: 
@@ -47,7 +47,7 @@ get_local_driver_dir f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Con
 [localhost] out: total size is 12.65M  speedup is 2.83
 [localhost] out: 
 [localhost] local: pwd
-[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/riscv-tools/lib/libriscv.so /tmp/tmpki865ylb/libriscv.so
+[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/riscv-tools/lib/libriscv.so /tmp/tmp91c23000/libriscv.so
 [localhost] out: sending incremental file list
 [localhost] out: libriscv.so
 [localhost] out: 
@@ -55,7 +55,7 @@ get_local_driver_dir f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Con
 [localhost] out: total size is 177.32M  speedup is 5.70
 [localhost] out: 
 [localhost] local: pwd
-[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libdwarf.so.1.0.0 /tmp/tmpki865ylb/libdwarf.so.1
+[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libdwarf.so.1.0.0 /tmp/tmp91c23000/libdwarf.so.1
 [localhost] out: sending incremental file list
 [localhost] out: libdwarf.so.1.0.0
 [localhost] out: 
@@ -63,7 +63,7 @@ get_local_driver_dir f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Con
 [localhost] out: total size is 486.20K  speedup is 2.43
 [localhost] out: 
 [localhost] local: pwd
-[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libelf-0.187.so /tmp/tmpki865ylb/libelf.so.1
+[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libelf-0.187.so /tmp/tmp91c23000/libelf.so.1
 [localhost] out: sending incremental file list
 [localhost] out: libelf-0.187.so
 [localhost] out: 
@@ -71,7 +71,7 @@ get_local_driver_dir f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Con
 [localhost] out: total size is 117.87K  speedup is 2.31
 [localhost] out: 
 [localhost] local: pwd
-[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libz.so.1.2.13 /tmp/tmpki865ylb/libz.so.1
+[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libz.so.1.2.13 /tmp/tmp91c23000/libz.so.1
 [localhost] out: sending incremental file list
 [localhost] out: libz.so.1.2.13
 [localhost] out: 
@@ -79,7 +79,7 @@ get_local_driver_dir f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Con
 [localhost] out: total size is 112.80K  speedup is 1.89
 [localhost] out: 
 [localhost] local: pwd
-[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libstdc++.so.6.0.34 /tmp/tmpki865ylb/libstdc++.so.6
+[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libstdc++.so.6.0.34 /tmp/tmp91c23000/libstdc++.so.6
 [localhost] out: sending incremental file list
 [localhost] out: libstdc++.so.6.0.34
 [localhost] out: 
@@ -87,7 +87,7 @@ get_local_driver_dir f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Con
 [localhost] out: total size is 21.30M  speedup is 2.93
 [localhost] out: 
 [localhost] local: pwd
-[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libgmp.so.10.5.0 /tmp/tmpki865ylb/libgmp.so.10
+[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libgmp.so.10.5.0 /tmp/tmp91c23000/libgmp.so.10
 [localhost] out: sending incremental file list
 [localhost] out: libgmp.so.10.5.0
 [localhost] out: 
@@ -95,7 +95,7 @@ get_local_driver_dir f2-firesim-FireSim-FireSimLeanGemminiRocketConfig-BaseF2Con
 [localhost] out: total size is 749.06K  speedup is 2.15
 [localhost] out: 
 [localhost] local: pwd
-[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libgcc_s.so.1 /tmp/tmpki865ylb/libgcc_s.so.1
+[localhost] run: rsync -pthrvz -L /home/ubuntu/chipyard/.conda-env/lib/libgcc_s.so.1 /tmp/tmp91c23000/libgcc_s.so.1
 [localhost] out: sending incremental file list
 [localhost] out: libgcc_s.so.1
 [localhost] out: 
@@ -129,4 +129,4 @@ Warning: run() received nonzero return code 1 while executing 'sudo pkill -SIGKI
 [172.31.41.234] Starting Vivado hw_server.
 [172.31.41.234] Starting Vivado virtual JTAG.
 The full log of this run is:
-/home/ubuntu/chipyard/sims/firesim/deploy/logs/2026-09-26--16-49-01-infrasetup-Z75QUJAMTUQTK78Q.log
+/home/ubuntu/chipyard/sims/firesim/deploy/logs/2026-09-26--17-03-55-infrasetup-93O3RC3S1FW65H5K.log

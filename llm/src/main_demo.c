@@ -56,14 +56,29 @@ static void put(const char *s) {
 static void drain(void) {}
 #endif
 
-static int prev = TOK_BOS, generated;
+enum { WRAP = 96 }; /* wrap the story before this column, at a space */
 
-/* Print one token's text. The first piece after BOS loses its leading space, as in decode(). */
+static int prev = TOK_BOS, generated, column;
+
+/* Print one token's text. The first piece after BOS loses its leading space, as in decode().
+   A piece that starts a word and would cross WRAP starts a new line instead of its space. */
 static void put_token(int t) {
   const char *p = tok_pieces + tok_offsets[t];
-  if (prev == TOK_BOS && *p == ' ')
+  int len = 0;
+  while (p[len])
+    len++;
+  if (prev == TOK_BOS && *p == ' ') {
     p++;
+    len--;
+  } else if (*p == ' ' && column + len > WRAP) {
+    put("\n");
+    p++;
+    len--;
+    column = 0;
+  }
   put(p);
+  for (; *p; p++)
+    column = *p == '\n' ? 0 : column + 1;
   prev = t;
 }
 
