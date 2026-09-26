@@ -85,6 +85,17 @@ Notes:
 - FireSim reaches the F2 with `~/firesim.pem`, so copy the key there. The `ogsa-firesim` security group lets its members reach each other on port 22.
 - `infrasetup` builds the host driver on the manager, then installs the FPGA tools on the F2 and flashes the image.
 
+## Run a program on the FPGA
+
+On the manager, run any bare-metal ELF that runs on Spike:
+
+```
+scp aws/manager/fpga-run.sh ogsa-firesim-manager:~/
+bash ~/fpga-run.sh path/to/program-baremetal
+```
+
+The script wraps the ELF as a FireSim workload, runs `firesim infrasetup` (which copies the workload to the F2), then `firesim runworkload`, and prints the console output. A run takes about 1–1.5 minutes. `llm/fpga/f2/FIRESIM.md` has the stories260K run.
+
 ## Daily use
 
 ```
