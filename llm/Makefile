@@ -4,7 +4,9 @@ LDFLAGS ?= -lm
 
 MODEL = src/main.c src/model.c
 
-.PHONY: all test test-f2 clean
+PYTHON ?= tools/.venv/bin/python
+
+.PHONY: all test test-f2 stories clean
 
 all: llm-cpu
 
@@ -22,6 +24,16 @@ test: llm-cpu
 
 test-f2: llm-f2-sim
 	./llm-f2-sim
+
+# Pretrained stories260K as int8 with calibrated static output scales (#5). Needs numpy.
+stories: weights/stories260k.h
+
+tools/.venv/bin/python:
+	python3 -m venv tools/.venv
+	tools/.venv/bin/pip install -q numpy
+
+weights/stories260k.h: tools/export_stories.py tools/stories_int8.py $(PYTHON)
+	cd tools && $(abspath $(PYTHON)) export_stories.py
 
 clean:
 	rm -f llm-cpu llm-f2 llm-f2-sim
