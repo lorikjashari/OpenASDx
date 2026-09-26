@@ -3,7 +3,7 @@
 #   sudo llm/bench/mac-power.sh            (from the repo root; about 3 minutes)
 # powermetrics samples the CPU and GPU power every 200 ms while each benchmark runs for SECONDS.
 # The benchmarks run as you, not as root. Results: llm/bench/results/mac/ (NAME.json from the
-# benchmark, NAME.power.txt from powermetrics). Close other busy apps first: they add to the power.
+# benchmark, NAME.power.txt.gz from powermetrics). Close other busy apps first: they add to the power.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run it with sudo: powermetrics needs root" >&2; exit 1; }
 user=${SUDO_USER:?run it with sudo from your own account}
@@ -40,6 +40,7 @@ measure torch-mps-b1       "$py" bench_torch.py --device mps --batch 1 --seconds
 measure torch-mps-b64      "$py" bench_torch.py --device mps --batch 64 --seconds "$SECONDS_EACH"
 measure torch-mps-b1024    "$py" bench_torch.py --device mps --batch 1024 --seconds "$SECONDS_EACH"
 
+gzip -9f "$out"/*.power.txt  # report.py reads them gzipped
 sysctl -n machdep.cpu.brand_string > "$out/machine.txt"
 sw_vers >> "$out/machine.txt"
 chown -R "$user" "$out"

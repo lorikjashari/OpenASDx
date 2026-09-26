@@ -11,7 +11,7 @@ sudo llm/bench/mac-power.sh                                 # every benchmark, 2
 
 `mac-power.sh` measures 15 s idle first, then runs each benchmark as your user while `powermetrics` samples the CPU and GPU power every 200 ms. It writes to `results/mac/`:
 - `NAME.json`: the benchmark's result, including its timed window (`t_start`, `t_end`);
-- `NAME.power.txt`: the power samples, gzipped afterwards with `gzip -9 results/mac/*.power.txt`.
+- `NAME.power.txt.gz`: the power samples.
 
 `llm/tools/report.py` keeps only the samples inside each timed window.
 
