@@ -24,6 +24,12 @@ STORIES = src/main_stories.c src/stories.c include/stories.h include/backend.h w
 llm-stories: $(STORIES) src/backend_cpu.c
 	$(CC) $(CFLAGS) -Iweights -o $@ src/main_stories.c src/stories.c src/backend_cpu.c $(LDFLAGS)
 
+llm-demo: $(STORIES) src/main_demo.c src/backend_cpu.c weights/tok512.h
+	$(CC) $(CFLAGS) -Iweights -o $@ src/main_demo.c src/stories.c src/backend_cpu.c $(LDFLAGS)
+
+demo: llm-demo
+	./llm-demo
+
 # Bare-metal RISC-V build for Spike and FireSim (#33), inside the Chipyard environment
 # (docker/dev.sh shell, then source /work/vol/chipyard/env.sh). Every GEMM runs on Gemmini and on the
 # CPU reference in the same binary; the flags are Gemmini's bare-metal ones, without -ffast-math.
@@ -37,7 +43,7 @@ RV_CFLAGS = -DBAREMETAL=1 -DPREALLOCATE=1 -mcmodel=medany -std=gnu11 -O2 -fno-co
 RV_LDFLAGS = -nostdlib -nostartfiles -static -T $(RV_COMMON)/test.ld
 RV_BUILD = build-riscv
 
-$(RV_BUILD)/%.o: src/%.c include/backend.h include/stories.h weights/stories260k.h
+$(RV_BUILD)/%.o: src/%.c include/backend.h include/stories.h weights/stories260k.h weights/tok512.h
 	@mkdir -p $(RV_BUILD)
 	$(RV_CC) $(RV_CFLAGS) -c -o $@ $<
 
@@ -65,6 +71,20 @@ llm-stories-cpu-baremetal: $(RV_BUILD)/main_stories.o $(RV_BUILD)/stories.o \
 		$(RV_BUILD)/backend_cpu.o $(RV_BUILD)/baremetal.o
 	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
 
+# The demo (#7): the story printed word by word as it is generated, with every GEMM on Gemmini.
+llm-demo-baremetal: $(RV_BUILD)/main_demo.o $(RV_BUILD)/stories.o $(RV_BUILD)/backend_gemmini.o \
+		$(RV_BUILD)/baremetal.o
+	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
+
+# The same demo for FireSim: it prints through the chip's UART, which shows each word at once.
+$(RV_BUILD)/main_demo_uart.o: src/main_demo.c include/backend.h include/stories.h weights/tok512.h
+	@mkdir -p $(RV_BUILD)
+	$(RV_CC) $(RV_CFLAGS) -DDEMO_UART -c -o $@ $<
+
+llm-demo-firesim: $(RV_BUILD)/main_demo_uart.o $(RV_BUILD)/stories.o $(RV_BUILD)/backend_gemmini.o \
+		$(RV_BUILD)/baremetal.o
+	$(RV_CC) $(RV_CFLAGS) $(RV_LDFLAGS) -o $@ $^ $(RV_COMMON)/syscalls.c $(RV_COMMON)/crt.S -lm -lgcc
+
 test-spike: llm-stories-baremetal
 	spike --extension=gemmini ./llm-stories-baremetal
 
@@ -89,5 +109,5 @@ tools/.venv/bin/python:
 
 clean:
 	rm -f llm-cpu llm-f2 llm-f2-sim llm-stories llm-stories-baremetal llm-stories-gemmini-baremetal \
-		llm-stories-cpu-baremetal
+		llm-stories-cpu-baremetal llm-demo llm-demo-baremetal llm-demo-firesim
 	rm -rf $(RV_BUILD)

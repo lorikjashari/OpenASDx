@@ -65,6 +65,16 @@ make test-f2    # same model, GEMM goes through the F2 register protocol in soft
 
 `test-f2` does not need an FPGA. It writes the OCL register block defined in `fpga/f2/cl_gemm_regs.h` and a stand-in engine performs the int8 mac. That is the host path you will keep when the real image is loaded.
 
+## The demo
+
+```shell
+make demo                       # on the Mac: the story, word by word, with the CPU backend
+make llm-demo-baremetal         # for Spike (prints through HTIF)
+make llm-demo-firesim           # for the FPGA (prints through the chip's UART; it doesn't run on Spike)
+```
+
+`src/main_demo.c` continues the prompt for up to 100 tokens, and prints each word as soon as it is chosen, then the cycles per token. The words come from `weights/tok512.h`, the tokenizer's 512 pieces, written by `tools/export_vocab.py`. The recording of the FPGA run is in `img/demo/`.
+
 ## FPGA path: FireSim with Gemmini on F2
 
 Decided in #34. The FPGA runs a whole Chipyard chip, Rocket and Gemmini, built by FireSim, the same Gemmini we test on Spike (`fpga/f2/SPIKE.md`). The model is one RISC-V binary that runs on Spike, in Verilator, and on the FPGA.

@@ -8,4 +8,7 @@ llm-f2-sim
 llm-stories-baremetal
 llm-stories-gemmini-baremetal
 llm-stories-cpu-baremetal
+llm-demo
+llm-demo-baremetal
+llm-demo-firesim
 build-riscv/

@@ -5,6 +5,7 @@
 
 Sources:
   llm/fpga/f2/results/*.uartlog          console output of the FPGA runs (cycles, tokens, tests)
+  llm/fpga/f2/results/demo/              the recorded demo run
   llm/fpga/f2/results/sweep-summary.txt  one line per FPGA run of Gemmini's tests
   llm/fpga/f2/results/stories-gemmini.{size,symbols}.txt   the ELF's sections and symbols
   llm/weights/stories260k.h              the model's shape
@@ -192,6 +193,11 @@ def values():
         for lim in LEAN_LIMITS[n]:
             by_limit.setdefault(lim, []).append(n)
 
+    demo = read("demo/stories260k-demo.uartlog")
+    assert "*** PASSED ***" in demo
+    dm = re.search(r"(\d+) tokens, \d+ GEMMs, (\d+) cycles per token on average: ([\d.]+) tokens/s", demo)
+    demo_tokens, demo_cycles, demo_tps = int(dm.group(1)), int(dm.group(2)), dm.group(3)
+
     util_perf = 100 * perf_ideal / perf_cycles
     util_llm = 100 * macs / g_gemm / PEAK_MACS_PER_CYCLE
 
@@ -200,6 +206,7 @@ def values():
     f = lambda x: f"{x:,.0f}"
     M = lambda x: f"{x / 1e6:.2f}M"
     v = {
+        "demo_tokens": demo_tokens, "demo_cycles_m": f"{demo_cycles / 1e6:.1f}M", "demo_tps": demo_tps,
         "prompt": prompt_text, "text": text, "params": f(params), "run_s": run_s,
         "layers": layers, "dim": dim, "hidden": hidden, "heads": heads, "kv_heads": kv_heads,
         "vocab": vocab, "max_seq": max_seq,

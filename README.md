@@ -5,6 +5,10 @@
 OpenASDx: an LLM on Gemmini, on a real FPGA
 ====================================
 
+![stories260K writing a story on the AWS F2 FPGA, every matmul on Gemmini](img/demo/stories260k-fpga.gif)
+
+*stories260K on the real FPGA, recorded live: the chip prints each word as soon as it has chosen it (`llm-demo-firesim`, [img/demo/](img/demo/README.md)).*
+
 This repo is a fork of [Gemmini](https://github.com/ucb-bar/gemmini), UC Berkeley's open-source systolic-array accelerator for RISC-V (upstream documentation below). We built it for the hackathon "Towards an Open-Source GPU for Science". On top of Gemmini, we run a language model, stories260K, with **every matrix multiplication on Gemmini**: first on the Spike simulator, then on a real **AWS F2 FPGA** through FireSim.
 
 **Read the results in [REPORT.md](REPORT.md).** In short, on the FPGA:

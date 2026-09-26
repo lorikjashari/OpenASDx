@@ -1,0 +1,133 @@
+/home/ubuntu/chipyard/.conda-env/lib/python3.10/site-packages/paramiko/pkey.py:82: CryptographyDeprecationWarning: TripleDES has been moved to cryptography.hazmat.decrepit.ciphers.algorithms.TripleDES and will be removed from cryptography.hazmat.primitives.ciphers.algorithms in 48.0.0.
+  "cipher": algorithms.TripleDES,
+/home/ubuntu/chipyard/.conda-env/lib/python3.10/site-packages/paramiko/transport.py:260: CryptographyDeprecationWarning: TripleDES has been moved to cryptography.hazmat.decrepit.ciphers.algorithms.TripleDES and will be removed from cryptography.hazmat.primitives.ciphers.algorithms in 48.0.0.
+  "class": algorithms.TripleDES,
+FireSim Manager. Docs: https://docs.fires.im
+Running: runworkload
+
+firesim_gemmini_rocket_singlecore_no_nic is overriding a deploy makefrag in your config_hwdb.yaml file. Make sure you understand why!
+run_farm_hosts_dict defaultdict(<class 'list'>, {'172.31.41.234': [(<runtools.run_farm.Inst object at 0x783c02190700>, None)]})
+set_server_hardware_config 0 None
+Creating the directory: /home/ubuntu/chipyard/sims/firesim/deploy/results-workload/2026-09-26--16-50-01-openasdx-llm-demo-firesim/
+[172.31.41.234] Checking if host instance is up...
+start_simulations_instance 1
+[172.31.41.234] Starting FPGA simulation for slot: 0.
+start_sim_slot slotno: 0 server_id 0 remote_sim_dir /home/ubuntu/FIRESIM_RUNS_DIR/sim_slot_0/ /home/ubuntu/FIRESIM_RUNS_DIR
+[2J
+FireSim Simulation Status @ 2026-09-26 16:50:04.827924
+--------------------------------------------------------------------------------
+This workload's output is located in:
+/home/ubuntu/chipyard/sims/firesim/deploy/results-workload/2026-09-26--16-50-01-openasdx-llm-demo-firesim/
+This run's log is located in:
+/home/ubuntu/chipyard/sims/firesim/deploy/logs/2026-09-26--16-50-01-runworkload-LK7KOPJ3JL0JILZG.log
+This status will update every 10s.
+--------------------------------------------------------------------------------
+Instances
+--------------------------------------------------------------------------------
+Hostname/IP: 172.31.41.234 | Terminated: [33mFalse[0m
+--------------------------------------------------------------------------------
+Simulated Switches
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Pipes
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Nodes/Jobs
+--------------------------------------------------------------------------------
+Hostname/IP: 172.31.41.234 | Job: openasdx-llm-demo-firesim0 | Sim running: [33mTrue [0m
+--------------------------------------------------------------------------------
+Summary
+--------------------------------------------------------------------------------
+1/1 instances are still running.
+1/1 simulations are still running.
+--------------------------------------------------------------------------------
+[2J
+FireSim Simulation Status @ 2026-09-26 16:50:15.135006
+--------------------------------------------------------------------------------
+This workload's output is located in:
+/home/ubuntu/chipyard/sims/firesim/deploy/results-workload/2026-09-26--16-50-01-openasdx-llm-demo-firesim/
+This run's log is located in:
+/home/ubuntu/chipyard/sims/firesim/deploy/logs/2026-09-26--16-50-01-runworkload-LK7KOPJ3JL0JILZG.log
+This status will update every 10s.
+--------------------------------------------------------------------------------
+Instances
+--------------------------------------------------------------------------------
+Hostname/IP: 172.31.41.234 | Terminated: [33mFalse[0m
+--------------------------------------------------------------------------------
+Simulated Switches
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Pipes
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Nodes/Jobs
+--------------------------------------------------------------------------------
+Hostname/IP: 172.31.41.234 | Job: openasdx-llm-demo-firesim0 | Sim running: [33mTrue [0m
+--------------------------------------------------------------------------------
+Summary
+--------------------------------------------------------------------------------
+1/1 instances are still running.
+1/1 simulations are still running.
+--------------------------------------------------------------------------------
+[2J
+FireSim Simulation Status @ 2026-09-26 16:50:25.472179
+--------------------------------------------------------------------------------
+This workload's output is located in:
+/home/ubuntu/chipyard/sims/firesim/deploy/results-workload/2026-09-26--16-50-01-openasdx-llm-demo-firesim/
+This run's log is located in:
+/home/ubuntu/chipyard/sims/firesim/deploy/logs/2026-09-26--16-50-01-runworkload-LK7KOPJ3JL0JILZG.log
+This status will update every 10s.
+--------------------------------------------------------------------------------
+Instances
+--------------------------------------------------------------------------------
+Hostname/IP: 172.31.41.234 | Terminated: [33mFalse[0m
+--------------------------------------------------------------------------------
+Simulated Switches
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Pipes
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Nodes/Jobs
+--------------------------------------------------------------------------------
+Hostname/IP: 172.31.41.234 | Job: openasdx-llm-demo-firesim0 | Sim running: [33mTrue [0m
+--------------------------------------------------------------------------------
+Summary
+--------------------------------------------------------------------------------
+1/1 instances are still running.
+1/1 simulations are still running.
+--------------------------------------------------------------------------------
+[172.31.41.234] Slot 0, Job openasdx-llm-demo-firesim0 completed!
+WARNING: Skipping terminate_by_inst since run hosts are externally provisioned.
+[2J
+FireSim Simulation Status @ 2026-09-26 16:50:36.101703
+--------------------------------------------------------------------------------
+This workload's output is located in:
+/home/ubuntu/chipyard/sims/firesim/deploy/results-workload/2026-09-26--16-50-01-openasdx-llm-demo-firesim/
+This run's log is located in:
+/home/ubuntu/chipyard/sims/firesim/deploy/logs/2026-09-26--16-50-01-runworkload-LK7KOPJ3JL0JILZG.log
+This status will update every 10s.
+--------------------------------------------------------------------------------
+Instances
+--------------------------------------------------------------------------------
+Hostname/IP: 172.31.41.234 | Terminated: [32mTrue [0m
+--------------------------------------------------------------------------------
+Simulated Switches
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Pipes
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Simulated Nodes/Jobs
+--------------------------------------------------------------------------------
+Hostname/IP: 172.31.41.234 | Job: openasdx-llm-demo-firesim0 | Sim running: [32mFalse[0m
+--------------------------------------------------------------------------------
+Summary
+--------------------------------------------------------------------------------
+0/1 instances are still running.
+0/1 simulations are still running.
+--------------------------------------------------------------------------------
+FireSim Simulation Exited Successfully. See results in:
+/home/ubuntu/chipyard/sims/firesim/deploy/results-workload/2026-09-26--16-50-01-openasdx-llm-demo-firesim/
+The full log of this run is:
+/home/ubuntu/chipyard/sims/firesim/deploy/logs/2026-09-26--16-50-01-runworkload-LK7KOPJ3JL0JILZG.log

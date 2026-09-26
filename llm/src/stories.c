@@ -25,6 +25,9 @@ static unsigned long (*clock_fn)(void);
 static unsigned long pos_cycles[ST_MAX_SEQ], pos_gemm_cycles[ST_MAX_SEQ];
 static unsigned long gemm_cycles;
 
+/* Optional callback for each new token (stories_set_on_token). */
+static int (*on_token_fn)(int token);
+
 /* Every matmul goes through here: count it, and time it if a clock is set. */
 static void gemm(const int8_t *A, const int8_t *B, float *C, int M, int N, int K, int trans_b,
                  float acc_scale, float out_scale) {
@@ -165,7 +168,8 @@ int stories_generate(int *tokens, int prompt_len, int max_new) {
     unsigned long t0 = clock_fn ? clock_fn() : 0;
     gemm_cycles = 0;
     forward(tokens[pos], pos, logits);
-    if (pos == n - 1) {
+    const int produces = pos == n - 1;
+    if (produces) {
       int best = 0;
       for (int i = 1; i < ST_VOCAB; i++)
         if (logits[i] > logits[best])
@@ -176,6 +180,8 @@ int stories_generate(int *tokens, int prompt_len, int max_new) {
       pos_cycles[pos] = clock_fn() - t0;
       pos_gemm_cycles[pos] = gemm_cycles;
     }
+    if (produces && on_token_fn && on_token_fn(tokens[n - 1]))
+      break;
   }
   return n;
 }
@@ -193,5 +199,6 @@ const int *stories_expected(int *n) {
 long stories_gemm_count(void) { return gemm_count; }
 
 void stories_set_clock(unsigned long (*clock)(void)) { clock_fn = clock; }
+void stories_set_on_token(int (*fn)(int token)) { on_token_fn = fn; }
 unsigned long stories_position_cycles(int pos) { return pos_cycles[pos]; }
 unsigned long stories_position_gemm_cycles(int pos) { return pos_gemm_cycles[pos]; }
