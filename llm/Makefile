@@ -25,15 +25,15 @@ test: llm-cpu
 test-f2: llm-f2-sim
 	./llm-f2-sim
 
-# Pretrained stories260K as int8 with calibrated static output scales (#5). Needs numpy.
-stories: weights/stories260k.h
+# weights/stories260k.h is the frozen model (committed, SHA-256 in weights/TASK.md).
+# Re-export it only on purpose: another numpy or BLAS can change a scale in its last bit.
+stories: $(PYTHON)
+	cd tools && $(abspath $(PYTHON)) export_stories.py
+	shasum -a 256 weights/stories260k.h
 
 tools/.venv/bin/python:
 	python3 -m venv tools/.venv
 	tools/.venv/bin/pip install -q numpy
-
-weights/stories260k.h: tools/export_stories.py tools/stories_int8.py $(PYTHON)
-	cd tools && $(abspath $(PYTHON)) export_stories.py
 
 clean:
 	rm -f llm-cpu llm-f2 llm-f2-sim

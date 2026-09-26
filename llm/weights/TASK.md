@@ -19,7 +19,15 @@ Expected greedy output, 30 new tokens, Lean contract:
 
 The float model continues differently after "outside in the": `park. One day,`. Both are fluent, and int8 changes the continuation from that point on.
 
-The expected token ids are `st_expected` in `stories260k.h`. `make -C llm stories` generates that header and checks the example.
+The expected token ids are `st_expected` in `stories260k.h`.
+
+## Frozen model
+
+`llm/weights/stories260k.h` is the frozen model: the int8 weights, one scale per weight tensor, and the 46 static output scales, calibrated once. It is committed, so the CPU, Spike and the FPGA all use the same bytes.
+
+SHA-256: `d3554f4a1ecbcb50225c0679fa597767d31a56689329df0d5bef0c08f2f7eeab`
+
+`make -C llm stories` re-exports it and prints the checksum. Do that only on purpose, since a different numpy or BLAS can change a scale in its last bit. The export parses the header back and checks the example before it finishes.
 
 ## Quality
 
