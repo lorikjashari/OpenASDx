@@ -9,6 +9,7 @@ We ran a small language model on a real FPGA, with every matrix multiplication (
 - **It works, and it's exact.** The model is stories260K. We ran all {{gemms}} GEMMs of a generation on Gemmini and on the CPU side by side, and they are **bit-identical**. The tokens are the same on the FPGA, on the Spike simulator and on a Mac.
 - **It's faster.** A token takes **{{g_cycles_m}} cycles with Gemmini, against {{c_cycles_m}} on the RISC-V core alone**. That's {{speedup}}× end to end, and about {{gemm_speedup}}× on the GEMMs themselves. At the FPGA's {{mhz}} MHz, that's **{{g_tps}} tokens/s against {{c_tps}}**.
 - **The hardware is sound.** Every Gemmini bare-metal test within the prebuilt image's features passes on the FPGA ({{n_pass}} of {{n_tests}}), and a large matmul reaches **{{util_perf}}% of peak**.
+- **Against a laptop:** one core of an {{machine}} runs the same C code {{c1_vs_fpga_speed}}× faster, mostly thanks to its clock, and at about {{fpga_vs_c1_energy}}× less energy per token than the FPGA, which is emulating the chip. Its GPU wins only with 1,024 sequences at once (see "Against a laptop").
 - **The bottleneck is now software.** With Gemmini doing the GEMMs, {{g_rest_pct}}% of a token's cycles go to work on the core, and the GEMMs use only {{util_llm}}% of Gemmini's peak, because decoding multiplies one vector at a time. Both problems have known fixes, listed under "What's next".
 
 Prompt: **"{{prompt}}"**. What the model wrote on the FPGA:
@@ -177,6 +178,35 @@ We ran {{n_tests}} bare-metal tests: **{{n_pass}} pass, which is every test with
 | `conv_dw_perf` depthwise, batch 3, 112×112×17, 3×3, stride 2 | {{conv_dw}} | |
 
 Details and every console log: `llm/fpga/f2/FIRESIM.md` and `llm/fpga/f2/results/`.
+
+## Against a laptop: {{machine}}
+
+The same model and prompt, with 30 new tokens, on this team's laptop, an {{machine}}:
+- **our C int8 code**, the same as on the FPGA, on one CPU core;
+- **PyTorch in float32**, on the CPU and on the GPU (Metal), with one sequence or a batch.
+
+Each run lasted 20 s, with the power sampled every 200 ms by macOS' `powermetrics` (`llm/bench/mac-power.sh`). The results are in `llm/bench/results/mac/`. The C build gives exactly the FPGA's tokens, and PyTorch matches the numpy float reference on all 30 (`tools/bench_torch.py --check`).
+
+| system | tokens/s | power while running | energy per token |
+|---|---:|---:|---:|
+{{mac_rows}}
+| **FPGA: Rocket + Gemmini** | {{g_tps}} | {{p_g}} W, FPGA core rail | {{j_g}} J |
+| FPGA: Rocket core only | {{c_tps}} | {{p_c}} W, FPGA core rail | {{j_c}} J |
+
+![Speed and energy per token](img/report/comparison.png)
+
+What the numbers say:
+- **One M4 core runs our code {{c1_vs_fpga_speed}}× faster than the FPGA**, at {{c1_tps}} tokens/s ({{c1_us}} µs per token). Most of that is the clock: {{c1_ghz}} GHz against 30 MHz. Per cycle, the M4 core needs about {{m4_cycles_m}} cycles per token (its time per token × its clock), which is {{m4_vs_rocket}}× fewer than Rocket and {{m4_vs_gemmini}}× fewer than Rocket + Gemmini. The M4 is a wide out-of-order core with vector units, and Rocket is a small in-order core.
+- **The GPU only pays off with many sequences at once.** For one sequence, it's the slowest system on the Mac ({{gpu1_tps}} tokens/s, {{gpu1_vs_c}}× slower than the C code), because each token launches hundreds of tiny GPU kernels. With 1,024 sequences, it reaches {{gpu1024_tps}} tokens/s, {{gpu1024_vs_c}}× the C code, at {{gpu1024_mj}} mJ per token, the lowest energy per token of all ({{gpu1024_w}} W for the whole chip).
+- **The FPGA uses about {{fpga_vs_c1_energy}}× more energy per token than one M4 core.** That's expected, and it isn't Gemmini's efficiency: the FPGA emulates the chip, spending many LUTs and wires on each gate, at 30 MHz. A chip built from the same RTL would be far faster and far more efficient. We have no measurement of that, so we don't give a number.
+
+![Cycles per token](img/report/cycles-comparison.png)
+
+Caveats:
+- The Mac's power is `powermetrics`' estimate for the CPU and GPU. It leaves out the memory, the display and the rest of the laptop. The idle Mac, measured just before, drew {{mac_idle_mw}} mW, which is negligible here.
+- The FPGA's power is its core rail only.
+- C int8 and PyTorch float don't do the same arithmetic, so they give different tokens after a while. The C code is the one that computes exactly what the FPGA computes.
+- The M4's cycles per token assume the busiest core's average clock during the run. The thread moves between cores, so it's an estimate.
 
 ## The platform
 

@@ -44,6 +44,10 @@ demo: llm-demo
 llm-encode: src/main_encode.c src/tokenizer.c include/tokenizer.h weights/tok512.h
 	$(CC) $(CFLAGS) -Iweights -o $@ src/main_encode.c src/tokenizer.c $(LDFLAGS)
 
+# Host benchmark (#54): the int8 model on one CPU core, the same code and prompt as on the FPGA.
+llm-bench: $(STORIES) src/main_bench.c src/backend_cpu.c
+	$(CC) $(CFLAGS) -Iweights -o $@ src/main_bench.c src/stories.c src/backend_cpu.c $(LDFLAGS)
+
 # The C encoder against Tokenizer.encode() in tools/stories_int8.py.
 test-encoder: llm-encode $(PYTHON)
 	cd tools && $(abspath $(PYTHON)) check_encoder.py
@@ -131,5 +135,5 @@ tools/.venv/bin/python:
 
 clean:
 	rm -f llm-cpu llm-f2 llm-f2-sim llm-stories llm-stories-baremetal llm-stories-gemmini-baremetal \
-		llm-stories-cpu-baremetal llm-demo llm-demo-baremetal llm-demo-firesim llm-encode llm-chat llm-chat-firesim
+		llm-stories-cpu-baremetal llm-demo llm-demo-baremetal llm-demo-firesim llm-encode llm-chat llm-chat-firesim llm-bench
 	rm -rf $(RV_BUILD)

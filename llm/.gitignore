@@ -14,4 +14,5 @@ llm-demo-firesim
 llm-encode
 llm-chat
 llm-chat-firesim
+llm-bench
 build-riscv/
