@@ -26,7 +26,7 @@ OpenASDx runs a small language model on open hardware. The model is stories260K,
 | [`llm/fpga/f2/`](llm/fpga/f2/FIRESIM.md) | the FPGA runs: `FIRESIM.md` and every console log in `results/`. The Spike run is in `SPIKE.md` |
 | [`aws/`](aws/README.md) | launching and setting up the FireSim manager and the F2, and running a binary on the FPGA |
 | [`docker/`](docker/README.md) | Chipyard, Spike and Gemmini on an Apple Silicon Mac |
-| [`slides/`](slides/README.md) | the hackathon presentation, our talk (`TALK.md`) and the scripts that make our slides |
+| [`slides/`](slides/README.md) | the hackathon presentation and our talk (`TALK.md`) |
 | [`llm/bench/`](llm/bench/README.md) | the comparison with an Apple M4 Pro: speed and energy per token |
 
 On the FPGA, Gemmini is FireSim's prebuilt image `FireSimLeanGemminiRocketConfig`: a 16×16 int8 array with a 256 KB scratchpad and a 64 KB accumulator, weight-stationary only, with int8 read-out. The model follows that config's int8-out contract, described in `llm/README.md`.
