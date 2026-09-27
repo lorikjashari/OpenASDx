@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Benchmark stories260K in PyTorch, float32, with a KV cache: on the CPU and on the Mac's GPU (MPS).
+"""Benchmark stories260K in PyTorch, float32, with a KV cache: on the CPU, the Mac's GPU (MPS) or an
+NVIDIA GPU (CUDA).
 
     tools/.venv/bin/python tools/bench_torch.py                  every configuration, one JSON line each
     tools/.venv/bin/python tools/bench_torch.py --check          tokens against the numpy float reference
@@ -84,6 +85,12 @@ class Torch260K:
 def sync(device):
     if device == "mps":
         torch.mps.synchronize()
+    elif device == "cuda":
+        torch.cuda.synchronize()
+
+
+def gpu_available(device):
+    return torch.backends.mps.is_available() if device == "mps" else torch.cuda.is_available()
 
 
 def run(model, device, prompt, batch, seconds, threads):
@@ -108,7 +115,7 @@ def run(model, device, prompt, batch, seconds, threads):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--device", choices=["cpu", "mps"])
+    ap.add_argument("--device", choices=["cpu", "mps", "cuda"])
     ap.add_argument("--batch", type=int)
     ap.add_argument("--threads", type=int)
     ap.add_argument("--seconds", type=float, default=0)
@@ -121,16 +128,17 @@ def main():
 
     if args.check:
         ref = si.generate(m, si.Gemm("float"), prompt, NEW)
-        for device in ("cpu", "mps"):
+        for device in ["cpu"] + [d for d in ("mps", "cuda") if gpu_available(d)]:
             got = [int(t) for t in Torch260K(m, device).generate(prompt, 1, NEW)[0].cpu()]
             same = next((i for i, (a, b) in enumerate(zip(got, ref[PROMPT_LEN:])) if a != b), NEW)
             print(json.dumps({"check": device, "same_as_numpy_float": same, "of": NEW,
                               "text": tok.decode(prompt[1:] + got)}))
         return
 
+    gpus = [d for d in ("mps", "cuda") if gpu_available(d)]
     configs = [(args.device, args.batch, args.threads)] if args.device else [
-        ("cpu", 1, 1), ("cpu", 1, torch.get_num_threads()), ("cpu", 64, torch.get_num_threads()),
-        ("mps", 1, 0), ("mps", 64, 0), ("mps", 1024, 0)]
+        ("cpu", 1, 1), ("cpu", 1, torch.get_num_threads()), ("cpu", 64, torch.get_num_threads())] + [
+        (d, b, 0) for d in gpus for b in (1, 64, 1024)]
     for device, batch, threads in configs:
         if device == "cpu":
             torch.set_num_threads(threads or torch.get_num_threads())

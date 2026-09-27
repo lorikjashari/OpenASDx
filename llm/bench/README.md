@@ -15,4 +15,15 @@ sudo llm/bench/mac-power.sh                                 # every benchmark, 2
 
 `llm/tools/report.py` keeps only the samples inside each timed window.
 
-For Colab or another machine, run the same benchmarks and add a results folder next to `mac/`.
+## Colab, or another Linux machine with an NVIDIA GPU
+
+`linux-power.sh` runs the same benchmarks, plus PyTorch on CUDA, while `power_sampler.py` records every 200 ms:
+- the GPU's board power, from `nvidia-smi`;
+- the CPU package's energy counter (RAPL), where the VM exposes it. Colab's usually doesn't, and then there's no CPU power.
+
+On Colab, the repo being private:
+1. `llm/bench/colab-bundle.sh` packs `llm/` into `openasdx-llm.tar.gz`.
+2. Open `colab.ipynb` in Colab (File → Upload notebook) with a GPU runtime, and run its cells. The first one asks for the tarball.
+3. The last cell downloads `colab-GPU.zip`. Unzip it into `results/`.
+
+Elsewhere: `llm/bench/linux-power.sh NAME` writes to `results/NAME/`.
